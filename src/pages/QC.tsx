@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Tabs,
   Row,
@@ -23,6 +23,7 @@ import {
   Statistic,
   Alert,
   Typography,
+  Radio,
 } from 'antd';
 import {
   PlusOutlined,
@@ -42,6 +43,8 @@ import {
   RiseOutlined,
   BarChartOutlined,
   UserOutlined,
+  ClockCircleOutlined,
+  CloseCircleOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table/interface';
 import {
@@ -86,14 +89,18 @@ const auditTypeColors: Record<QualityControlRecord['auditType'], string> = {
 
 const statusLabels: Record<QualityControlRecord['status'], string> = {
   pending: '待审核',
-  completed: '已完成',
+  completed: '待整改',
   revised: '已整改',
+  pending_review: '待复核',
+  revision_rejected: '整改被退回',
 };
 
 const statusColors: Record<QualityControlRecord['status'], string> = {
   pending: 'gold',
-  completed: 'green',
-  revised: 'blue',
+  completed: 'orange',
+  revised: 'green',
+  pending_review: 'cyan',
+  revision_rejected: 'red',
 };
 
 const getScoreColor = (score: number): string => {
@@ -118,8 +125,11 @@ const QC: React.FC = () => {
     patients,
     addQCRecord,
     rectifyQCRecord,
+    reviewQCRecord,
     selectPatient,
     setActiveWindow,
+    openQCDetailId,
+    setOpenQCDetail,
   } = useAppStore();
 
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -129,6 +139,22 @@ const QC: React.FC = () => {
 
   const [detailVisible, setDetailVisible] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<QualityControlRecord | null>(null);
+
+  const [reviewModalVisible, setReviewModalVisible] = useState(false);
+  const [reviewingRecord, setReviewingRecord] = useState<QualityControlRecord | null>(null);
+  const [reviewResult, setReviewResult] = useState<'passed' | 'rejected'>('passed');
+  const [rejectReason, setRejectReason] = useState('');
+  const [reviewForm] = Form.useForm();
+
+  useEffect(() => {
+    if (openQCDetailId) {
+      const found = qualityControlRecords.find((r) => r.id === openQCDetailId);
+      if (found) {
+        setTimeout(() => handleViewDetail(found), 0);
+      }
+      setOpenQCDetail(null);
+    }
+  }, [openQCDetailId]);
 
   const [createModalVisible, setCreateModalVisible] = useState(false);
   const [createForm] = Form.useForm();
@@ -190,18 +216,64 @@ const QC: React.FC = () => {
       values.rectificationNote,
       values.rectificationDoctor
     );
-    message.success('整改完成！状态已更新');
+    message.success('整改已提交，进入待复核状态');
     setRectifyModalVisible(false);
     if (currentRecord && currentRecord.id === rectifyingRecord.id) {
-      setCurrentRecord({
-        ...rectifyingRecord,
-        status: 'revised',
-        rectificationNote: values.rectificationNote,
-        rectificationDate: new Date().toLocaleString('zh-CN'),
-        rectificationDoctor: values.rectificationDoctor,
-      });
+      const latest = qualityControlRecords.find((r) => r.id === rectifyingRecord.id);
+      if (latest) setCurrentRecord({ ...latest });
+      else {
+        setCurrentRecord({
+          ...rectifyingRecord,
+          status: 'pending_review',
+          rectificationNote: values.rectificationNote,
+          rectificationDate: new Date().toLocaleString('zh-CN'),
+          rectificationDoctor: values.rectificationDoctor,
+        });
+      }
     }
     setRectifyingRecord(null);
+  };
+
+  const refreshCurrentRecord = (recordId: string) => {
+    if (currentRecord && currentRecord.id === recordId) {
+      const latest = useAppStore.getState().qualityControlRecords.find((r) => r.id === recordId);
+      if (latest) setCurrentRecord({ ...latest });
+    }
+  };
+
+  const handleOpenReview = (record: QualityControlRecord) => {
+    setReviewingRecord(record);
+    setReviewResult('passed');
+    setRejectReason('');
+    reviewForm.resetFields();
+    reviewForm.setFieldsValue({
+      reviewDoctor: '李主任',
+      rejectReason: '',
+    });
+    setReviewModalVisible(true);
+  };
+
+  const handleReviewSubmit = async () => {
+    if (!reviewingRecord) return;
+    try {
+      const values = await reviewForm.validateFields();
+      if (reviewResult === 'rejected' && !values.rejectReason?.trim()) {
+        message.warning('请填写退回原因');
+        return;
+      }
+      reviewQCRecord(
+        reviewingRecord.id,
+        reviewResult === 'passed',
+        values.reviewDoctor,
+        values.rejectReason
+      );
+      message.success(reviewResult === 'passed' ? '复核通过！' : '已退回整改');
+      setReviewModalVisible(false);
+      setTimeout(() => refreshCurrentRecord(reviewingRecord.id), 20);
+      setReviewingRecord(null);
+    } catch (e) {
+      // 校验失败
+    }
   };
 
   const handleExport = () => {
@@ -400,9 +472,14 @@ const QC: React.FC = () => {
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
           </Button>
-          {(record.status === 'pending' || record.status === 'completed') && (
+          {(record.status === 'pending' || record.status === 'completed' || record.status === 'revision_rejected') && (
             <Button type="link" size="small" icon={<ToolOutlined />} onClick={() => handleRevise(record)}>
-              整改
+              {record.status === 'revision_rejected' ? '重新整改' : '整改'}
+            </Button>
+          )}
+          {record.status === 'pending_review' && (
+            <Button type="link" size="small" icon={<CheckCircleOutlined />} onClick={() => handleOpenReview(record)}>
+              复核
             </Button>
           )}
         </Space>
@@ -469,14 +546,16 @@ const QC: React.FC = () => {
               <Select
                 value={statusFilter}
                 onChange={setStatusFilter}
-                style={{ width: 130 }}
+                style={{ width: 150 }}
                 placeholder="状态"
                 allowClear
               >
                 <Option value="all">全部状态</Option>
                 <Option value="pending">待审核</Option>
-                <Option value="completed">已完成</Option>
+                <Option value="completed">待整改</Option>
+                <Option value="pending_review">待复核</Option>
                 <Option value="revised">已整改</Option>
+                <Option value="revision_rejected">整改被退回</Option>
               </Select>
               <Select
                 value={auditorFilter}
@@ -631,7 +710,10 @@ const QC: React.FC = () => {
             </div>
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={6}>
+      </Row>
+
+      <Row gutter={[16, 16]}>
+        <Col xs={24} sm={8}>
           <Card style={{ borderRadius: 8, borderTop: '4px solid #fa8c16' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
@@ -639,7 +721,9 @@ const QC: React.FC = () => {
                 <Statistic
                   value={
                     qualityControlRecords.filter(
-                      (r) => (r.status === 'pending' || r.status === 'completed') && r.problems.length > 0
+                      (r) =>
+                        (r.status === 'pending' || r.status === 'completed' || r.status === 'revision_rejected') &&
+                        r.problems.length > 0,
                     ).length
                   }
                   valueStyle={{ color: '#fa8c16', fontSize: 28, fontWeight: 700 }}
@@ -649,7 +733,21 @@ const QC: React.FC = () => {
             </div>
           </Card>
         </Col>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={24} sm={8}>
+          <Card style={{ borderRadius: 8, borderTop: '4px solid #13c2c2' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ color: '#666', fontSize: 13, marginBottom: 8 }}>待复核质控</div>
+                <Statistic
+                  value={qualityControlRecords.filter((r) => r.status === 'pending_review').length}
+                  valueStyle={{ color: '#13c2c2', fontSize: 28, fontWeight: 700 }}
+                />
+              </div>
+              <ClockCircleOutlined style={{ fontSize: 40, color: '#13c2c233' }} />
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
           <Card style={{ borderRadius: 8, borderTop: '4px solid #52c41a' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
@@ -912,10 +1010,22 @@ const QC: React.FC = () => {
         onClose={() => setDetailVisible(false)}
         extra={
           <Space>
-            {(currentRecord?.status === 'pending' || currentRecord?.status === 'completed') && (
-              <Button type="primary" icon={<ToolOutlined />} onClick={() => handleRevise(currentRecord)}>
-                整改
+            {(currentRecord?.status === 'pending' ||
+              currentRecord?.status === 'completed' ||
+              currentRecord?.status === 'revision_rejected') && (
+              <Button type="primary" icon={<ToolOutlined />} onClick={() => handleRevise(currentRecord!)}>
+                {currentRecord?.status === 'revision_rejected' ? '重新整改' : '整改'}
               </Button>
+            )}
+            {currentRecord?.status === 'pending_review' && (
+              <>
+                <Button danger onClick={() => { setReviewResult('rejected'); handleOpenReview(currentRecord); }}>
+                  退回重改
+                </Button>
+                <Button type="primary" icon={<CheckCircleOutlined />} onClick={() => { setReviewResult('passed'); handleOpenReview(currentRecord); }}>
+                  复核通过
+                </Button>
+              </>
             )}
             <Button onClick={() => setDetailVisible(false)}>关闭</Button>
           </Space>
@@ -1090,38 +1200,147 @@ const QC: React.FC = () => {
               </Card>
             )}
 
-            {currentRecord.status === 'revised' && currentRecord.rectificationNote && (
+            {(currentRecord.status === 'revised' ||
+              currentRecord.status === 'pending_review' ||
+              currentRecord.status === 'revision_rejected') &&
+              currentRecord.rectificationNote && (
+                <Card
+                  size="small"
+                  style={{
+                    borderRadius: 8,
+                    background:
+                      currentRecord.status === 'revision_rejected' ? '#fff1f0' : '#e6f7ff',
+                    border:
+                      currentRecord.status === 'revision_rejected'
+                        ? '1px solid #ffa39e'
+                        : '1px solid #91d5ff',
+                    marginTop: 12,
+                  }}
+                  title={
+                    <Space>
+                      <CheckCircleOutlined
+                        style={{
+                          color: currentRecord.status === 'revision_rejected' ? '#f5222d' : '#1890ff',
+                        }}
+                      />
+                      <span
+                        style={{
+                          color:
+                            currentRecord.status === 'revision_rejected' ? '#f5222d' : '#1890ff',
+                        }}
+                      >
+                        {currentRecord.status === 'revision_rejected' ? '整改（被退回）' : '整改信息'}
+                      </span>
+                    </Space>
+                  }
+                >
+                  <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                    <div>
+                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改说明</div>
+                      <div style={{ color: '#333', fontSize: 13, lineHeight: 1.6 }}>
+                        {currentRecord.rectificationNote}
+                      </div>
+                    </div>
+                    <Row gutter={[16, 8]}>
+                      <Col span={12}>
+                        <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改时间</div>
+                        <div style={{ color: '#333', fontWeight: 500 }}>
+                          {currentRecord.rectificationDate || '-'}
+                        </div>
+                      </Col>
+                      <Col span={12}>
+                        <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改医生</div>
+                        <div style={{ color: '#333', fontWeight: 500 }}>
+                          {currentRecord.rectificationDoctor || '-'}
+                        </div>
+                      </Col>
+                    </Row>
+                  </Space>
+                </Card>
+              )}
+
+            {(currentRecord.reviewResult ||
+              currentRecord.status === 'revised' ||
+              currentRecord.status === 'revision_rejected') && (
               <Card
                 size="small"
-                style={{ borderRadius: 8, background: '#e6f7ff', border: '1px solid #91d5ff' }}
+                style={{
+                  borderRadius: 8,
+                  background:
+                    currentRecord.reviewResult === 'passed'
+                      ? '#f6ffed'
+                      : currentRecord.reviewResult === 'rejected'
+                      ? '#fff1f0'
+                      : '#f0f5ff',
+                  border:
+                    currentRecord.reviewResult === 'passed'
+                      ? '1px solid #b7eb8f'
+                      : currentRecord.reviewResult === 'rejected'
+                      ? '1px solid #ffa39e'
+                      : '1px solid #adc6ff',
+                  marginTop: 12,
+                }}
                 title={
                   <Space>
-                    <CheckCircleOutlined style={{ color: '#1890ff' }} />
-                    <span style={{ color: '#1890ff' }}>整改信息</span>
+                    {currentRecord.reviewResult === 'passed' ? (
+                      <CheckCircleOutlined style={{ color: '#52c41a' }} />
+                    ) : currentRecord.reviewResult === 'rejected' ? (
+                      <CloseCircleOutlined style={{ color: '#f5222d' }} />
+                    ) : (
+                      <ClockCircleOutlined style={{ color: '#2f54eb' }} />
+                    )}
+                    <span
+                      style={{
+                        color:
+                          currentRecord.reviewResult === 'passed'
+                            ? '#52c41a'
+                            : currentRecord.reviewResult === 'rejected'
+                            ? '#f5222d'
+                            : '#2f54eb',
+                      }}
+                    >
+                      {currentRecord.reviewResult === 'passed'
+                        ? '复核通过'
+                        : currentRecord.reviewResult === 'rejected'
+                        ? '复核不通过'
+                        : '复核记录'}
+                    </span>
                   </Space>
                 }
               >
                 <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                  <div>
-                    <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改说明</div>
-                    <div style={{ color: '#333', fontSize: 13, lineHeight: 1.6 }}>
-                      {currentRecord.rectificationNote}
-                    </div>
-                  </div>
                   <Row gutter={[16, 8]}>
                     <Col span={12}>
-                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改时间</div>
+                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>复核时间</div>
                       <div style={{ color: '#333', fontWeight: 500 }}>
-                        {currentRecord.rectificationDate || '-'}
+                        {currentRecord.reviewDate || '-'}
                       </div>
                     </Col>
                     <Col span={12}>
-                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改医生</div>
+                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>复核医生</div>
                       <div style={{ color: '#333', fontWeight: 500 }}>
-                        {currentRecord.rectificationDoctor || '-'}
+                        {currentRecord.reviewDoctor || '-'}
                       </div>
                     </Col>
                   </Row>
+                  {currentRecord.rejectReason && (
+                    <div>
+                      <div style={{ color: '#f5222d', fontSize: 12, marginBottom: 4 }}>退回原因</div>
+                      <div
+                        style={{
+                          color: '#333',
+                          fontSize: 13,
+                          lineHeight: 1.6,
+                          background: '#fff',
+                          border: '1px solid #ffa39e',
+                          padding: 8,
+                          borderRadius: 4,
+                        }}
+                      >
+                        {currentRecord.rejectReason}
+                      </div>
+                    </div>
+                  )}
                 </Space>
               </Card>
             )}
@@ -1506,6 +1725,146 @@ const QC: React.FC = () => {
             </Form.Item>
           </Space>
         </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <SafetyCertificateOutlined />
+            <span>质控复核</span>
+          </Space>
+        }
+        open={reviewModalVisible}
+        onOk={handleReviewSubmit}
+        onCancel={() => {
+          setReviewModalVisible(false);
+          setReviewingRecord(null);
+        }}
+        okText={reviewResult === 'passed' ? '确认通过' : '确认退回'}
+        cancelText="取消"
+        width={640}
+        destroyOnClose
+        okButtonProps={{ danger: reviewResult === 'rejected' }}
+      >
+        {reviewingRecord && (
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            <Alert
+              type="info"
+              showIcon
+              message={
+                <Space size={16} wrap>
+                  <span>
+                    <strong>患者：</strong>
+                    {reviewingRecord.patientName}
+                  </span>
+                  <span>
+                    <strong>编号：</strong>
+                    {reviewingRecord.id}
+                  </span>
+                  <span>
+                    <strong>原总分：</strong>
+                    <span style={{ color: getScoreColor(reviewingRecord.totalScore) }}>
+                      {reviewingRecord.totalScore}分
+                    </span>
+                  </span>
+                  <span>
+                    <strong>当前状态：</strong>
+                    <Tag color={statusColors[reviewingRecord.status]}>
+                      {statusLabels[reviewingRecord.status]}
+                    </Tag>
+                  </span>
+                </Space>
+              }
+              style={{ marginBottom: 12 }}
+            />
+
+            <Card
+              size="small"
+              style={{ borderRadius: 8, borderLeft: '4px solid #1890ff' }}
+              title={
+                <Space>
+                  <FileTextOutlined />
+                  <span>复核结论</span>
+                </Space>
+              }
+            >
+              <Radio.Group
+                value={reviewResult}
+                onChange={(e) => setReviewResult(e.target.value as 'passed' | 'rejected')}
+                style={{ marginBottom: 16 }}
+              >
+                <Radio.Button value="passed" style={{ color: '#52c41a', fontWeight: 600 }}>
+                  复核通过
+                </Radio.Button>
+                <Radio.Button value="rejected" style={{ color: '#f5222d', fontWeight: 600 }}>
+                  退回重改
+                </Radio.Button>
+              </Radio.Group>
+
+              <Form form={reviewForm} layout="vertical" size="middle">
+                <Form.Item
+                  name="reviewDoctor"
+                  label={
+                    <span>
+                      <UserOutlined style={{ marginRight: 6 }} />
+                      复核医生 <Text type="danger">*</Text>
+                    </span>
+                  }
+                  rules={[{ required: true, message: '请填写复核医生姓名' }]}
+                >
+                  <Input placeholder="请填写复核医生姓名" />
+                </Form.Item>
+                {reviewResult === 'rejected' && (
+                  <Form.Item
+                    name="rejectReason"
+                    label={
+                      <span>
+                        <ExclamationCircleOutlined style={{ marginRight: 6, color: '#f5222d' }} />
+                        退回原因 <Text type="danger">*</Text>
+                      </span>
+                    }
+                    rules={[
+                      { required: true, message: '退回重改必须说明原因' },
+                      { max: 500, message: '退回原因不能超过500字' },
+                    ]}
+                  >
+                    <TextArea
+                      rows={4}
+                      placeholder="请详细说明退回原因，指导整改方向..."
+                      showCount
+                      maxLength={500}
+                    />
+                  </Form.Item>
+                )}
+              </Form>
+            </Card>
+
+            {reviewingRecord.rectificationNote && (
+              <Card
+                size="small"
+                style={{ borderRadius: 8, background: '#e6f7ff' }}
+                title={
+                  <Space>
+                    <CheckCircleOutlined style={{ color: '#1890ff' }} />
+                    <span>提交的整改内容</span>
+                  </Space>
+                }
+              >
+                <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                  {reviewingRecord.rectificationNote}
+                </div>
+                <Row gutter={[16, 4]} style={{ marginTop: 10 }}>
+                  <Col span={12}>
+                    <div style={{ color: '#666', fontSize: 12 }}>整改医生：{reviewingRecord.rectificationDoctor || '-'}</div>
+                  </Col>
+                  <Col span={12}>
+                    <div style={{ color: '#666', fontSize: 12 }}>整改时间：{reviewingRecord.rectificationDate || '-'}</div>
+                  </Col>
+                </Row>
+              </Card>
+            )}
+          </Space>
+        )}
       </Modal>
     </div>
   );

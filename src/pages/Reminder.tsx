@@ -44,6 +44,10 @@ const Reminder: React.FC = () => {
     selectPatient,
     setActiveWindow,
     setPreFillConsultationPatient,
+    setConsultationSubTab,
+    setOpenConsultationDetail,
+    setOpenHospitalizationDetail,
+    setOpenQCDetail,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<string>('all');
@@ -72,17 +76,22 @@ const Reminder: React.FC = () => {
     switch (reminder.type) {
       case 'visit':
         if (reminder.patientId) {
-          selectPatient(reminder.patientId);
+          selectPatient(reminder.patientId, 'basic');
         }
         break;
       case 'consultation':
+        setConsultationSubTab('consultation');
         setActiveWindow('consultation');
+        setOpenConsultationDetail(reminder.recordId);
         break;
       case 'hospital':
+        setConsultationSubTab('hospitalization');
         setActiveWindow('consultation');
+        setOpenHospitalizationDetail(reminder.recordId);
         break;
       case 'qc':
         setActiveWindow('qc');
+        setOpenQCDetail(reminder.recordId);
         break;
       case 'shift':
         setActiveWindow('shift');

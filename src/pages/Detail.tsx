@@ -114,6 +114,8 @@ const Detail: React.FC = () => {
     updatePatientRiskLevel,
     setPreFillConsultationPatient,
     setPreFillHospitalizationPatient,
+    detailActiveTabKey,
+    setDetailActiveTabKey,
   } = useAppStore();
 
   const [riskModalVisible, setRiskModalVisible] = useState(false);
@@ -1380,7 +1382,8 @@ const Detail: React.FC = () => {
         style={{ borderRadius: 8 }}
       >
         <Tabs
-          defaultActiveKey="1"
+          activeKey={detailActiveTabKey || '1'}
+          onChange={(key) => setDetailActiveTabKey(key)}
           items={tabItems}
           size="large"
         />

@@ -65,25 +65,25 @@ const CATEGORY_OPTIONS = [
 ];
 
 const VISIT_TYPE_OPTIONS = [
-  { label: '常规产检', value: 'routine_check' },
-  { label: '专项复查', value: 'special_review' },
-  { label: '产前评估', value: 'prenatal_assessment' },
-  { label: '超声检查', value: 'ultrasound' },
-  { label: '化验检查', value: 'lab_test' },
-  { label: '胎心监护', value: 'nst' },
+  { label: '常规产检', value: '常规产检' },
+  { label: '专项复查', value: '专项复查' },
+  { label: '产前评估', value: '产前评估' },
+  { label: '超声检查', value: '超声检查' },
+  { label: '化验检查', value: '化验检查' },
+  { label: '胎心监护', value: '胎心监护' },
 ];
 
 const REVIEW_ITEM_OPTIONS = [
-  { label: '血压监测', value: 'bp' },
-  { label: '体重/宫高/腹围', value: 'measurements' },
-  { label: '血常规/尿常规', value: 'blood_urine' },
-  { label: '肝肾功能/凝血', value: 'liver_kidney' },
-  { label: '超声检查', value: 'ultrasound' },
-  { label: '胎心监护(NST)', value: 'nst' },
-  { label: '脐血流监测', value: 'umbilical' },
-  { label: '血糖轮廓', value: 'glucose' },
-  { label: '胆汁酸', value: 'bile_acid' },
-  { label: '其他实验室检查', value: 'other_lab' },
+  { label: '血压监测', value: '血压监测' },
+  { label: '体重/宫高/腹围', value: '体重/宫高/腹围' },
+  { label: '血常规/尿常规', value: '血常规/尿常规' },
+  { label: '肝肾功能/凝血', value: '肝肾功能/凝血' },
+  { label: '超声检查', value: '超声检查' },
+  { label: '胎心监护(NST)', value: '胎心监护(NST)' },
+  { label: '脐血流监测', value: '脐血流监测' },
+  { label: '血糖轮廓', value: '血糖轮廓' },
+  { label: '胆汁酸', value: '胆汁酸' },
+  { label: '其他实验室检查', value: '其他实验室检查' },
 ];
 
 const riskLevelTextMap: Record<RiskLevel, string> = {
@@ -829,8 +829,8 @@ const Template: React.FC = () => {
           onFinish={handleConfirmApply}
           initialValues={{
             nextVisitDate: dayjs().add(1, 'week'),
-            visitTypes: ['routine_check'],
-            visitItems: ['bp', 'measurements'],
+            visitTypes: ['常规产检'],
+            visitItems: ['血压监测', '体重/宫高/腹围'],
             remark: '',
           }}
         >

@@ -24,7 +24,10 @@ import {
   Descriptions,
   Popconfirm,
   Empty,
+  DatePicker,
+  Steps,
 } from 'antd';
+import dayjs, { Dayjs } from 'dayjs';
 import {
   PlusOutlined,
   SearchOutlined,
@@ -46,6 +49,7 @@ import {
   ExclamationCircleOutlined,
   StopOutlined,
   SendOutlined,
+  MedicineBoxOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table/interface';
 import { useAppStore } from '../store/appStore';
@@ -55,6 +59,35 @@ import type { Consultation, HospitalizationAdvice, RiskLevel, Patient } from '..
 const { Search } = Input;
 const { Option } = Select;
 const { TextArea } = Input;
+
+const VISIT_TYPE_OPTIONS = [
+  { label: '常规产检', value: '常规产检' },
+  { label: 'B超检查', value: 'B超检查' },
+  { label: '胎心监护(NST)', value: '胎心监护(NST)' },
+  { label: '糖耐量试验', value: '糖耐量试验' },
+  { label: '大排畸筛查', value: '大排畸筛查' },
+  { label: '小排畸筛查', value: '小排畸筛查' },
+  { label: '唐氏筛查', value: '唐氏筛查' },
+  { label: '产前诊断', value: '产前诊断' },
+  { label: '营养评估', value: '营养评估' },
+  { label: '产后复查', value: '产后复查' },
+  { label: '高危门诊', value: '高危门诊' },
+];
+
+const REVIEW_ITEM_OPTIONS = [
+  { label: '血压监测', value: '血压监测' },
+  { label: '体重/宫高/腹围', value: '体重/宫高/腹围' },
+  { label: '尿常规', value: '尿常规' },
+  { label: '血常规', value: '血常规' },
+  { label: '肝功能', value: '肝功能' },
+  { label: 'B超检查', value: 'B超检查' },
+  { label: '胎心监护(NST)', value: '胎心监护(NST)' },
+  { label: '宫颈评估', value: '宫颈评估' },
+  { label: '血糖监测', value: '血糖监测' },
+  { label: '心电图', value: '心电图' },
+  { label: '伤口/恶露评估', value: '伤口/恶露评估' },
+  { label: '母乳喂养评估', value: '母乳喂养评估' },
+];
 
 const consultationStatusLabels: Record<Consultation['status'], string> = {
   pending: '待处理',
@@ -173,6 +206,7 @@ const ConsultationPage: React.FC = () => {
     consultations,
     hospitalizationAdvices,
     patients,
+    dischargePlans,
     addConsultation,
     addHospitalizationAdvice,
     selectPatient,
@@ -184,9 +218,27 @@ const ConsultationPage: React.FC = () => {
     updateHospitalizationAdvice,
     updateHospitalizationStatus,
     replyConsultation,
+    consultationSubTab,
+    openConsultationDetailId,
+    openHospitalizationDetailId,
+    setConsultationSubTab,
+    setOpenConsultationDetail,
+    setOpenHospitalizationDetail,
+    dischargeWithPlan,
   } = useAppStore();
 
-  const [activeTab, setActiveTab] = useState('consultations');
+  const tabMapping = { consultation: 'consultations', hospitalization: 'hospital' };
+  const tabReverse: Record<string, 'consultation' | 'hospitalization'> = {
+    consultations: 'consultation',
+    hospital: 'hospitalization',
+  };
+  const [activeTab, setActiveTabState] = useState(tabMapping[consultationSubTab] || 'consultations');
+
+  const setActiveTab = (key: string) => {
+    setActiveTabState(key);
+    const storeKey = tabReverse[key];
+    if (storeKey) setConsultationSubTab(storeKey);
+  };
 
   useEffect(() => {
     if (preFillConsultationPatientId && typeof preFillConsultationPatientId === 'string') {
@@ -205,6 +257,34 @@ const ConsultationPage: React.FC = () => {
       }, 0);
     }
   }, [preFillHospitalizationPatientId]);
+
+  useEffect(() => {
+    if (consultationSubTab && tabMapping[consultationSubTab]) {
+      setActiveTabState(tabMapping[consultationSubTab]);
+    }
+  }, [consultationSubTab]);
+
+  useEffect(() => {
+    if (openConsultationDetailId) {
+      const found = consultations.find((c) => c.id === openConsultationDetailId);
+      if (found) {
+        setActiveTab('consultations');
+        setTimeout(() => handleOpenDetail(found), 0);
+      }
+      setOpenConsultationDetail(null);
+    }
+  }, [openConsultationDetailId]);
+
+  useEffect(() => {
+    if (openHospitalizationDetailId) {
+      const found = hospitalizationAdvices.find((a) => a.id === openHospitalizationDetailId);
+      if (found) {
+        setActiveTab('hospital');
+        setTimeout(() => handleOpenHospDetail(found), 0);
+      }
+      setOpenHospitalizationDetail(null);
+    }
+  }, [openHospitalizationDetailId]);
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -228,6 +308,10 @@ const ConsultationPage: React.FC = () => {
   const [hospDetailVisible, setHospDetailVisible] = useState(false);
   const [currentHospAdvice, setCurrentHospAdvice] = useState<HospitalizationAdvice | null>(null);
   const [hospForm] = Form.useForm();
+
+  const [dischargeModalVisible, setDischargeModalVisible] = useState(false);
+  const [dischargeAdviceId, setDischargeAdviceId] = useState<string | null>(null);
+  const [dischargeForm] = Form.useForm();
 
   const getPatientById = (id: string): Patient | undefined => patients.find((p) => p.id === id);
 
@@ -453,26 +537,63 @@ const ConsultationPage: React.FC = () => {
     }
   };
 
+  const refreshCurrentHospAdvice = (adviceId: string) => {
+    if (currentHospAdvice && currentHospAdvice.id === adviceId) {
+      const latest = useAppStore.getState().hospitalizationAdvices.find((a) => a.id === adviceId);
+      if (latest) setCurrentHospAdvice({ ...latest });
+    }
+  };
+
   const handleTransferToAdmission = (adviceId: string) => {
-    const advice = hospitalizationAdvices.find((a) => a.id === adviceId);
-    if (!advice) return;
     updateHospitalizationStatus(adviceId, 'admitted', {
       patientStatus: 'hospitalized',
       admissionDate: new Date().toLocaleDateString('zh-CN'),
       remark: '已办理住院登记',
     });
     message.success('住院登记成功！患者状态已更新为住院中');
+    refreshCurrentHospAdvice(adviceId);
   };
 
   const handleDischarge = (adviceId: string) => {
-    const advice = hospitalizationAdvices.find((a) => a.id === adviceId);
+    const advice = useAppStore.getState().hospitalizationAdvices.find((a) => a.id === adviceId);
     if (!advice) return;
-    updateHospitalizationStatus(adviceId, 'discharged', {
-      patientStatus: 'discharged',
-      dischargeDate: new Date().toLocaleDateString('zh-CN'),
-      remark: '已办理出院',
+    setDischargeAdviceId(adviceId);
+    dischargeForm.resetFields();
+    dischargeForm.setFieldsValue({
+      dischargeDate: dayjs(),
+      nextVisitDate: dayjs().add(42, 'day'),
+      visitTypes: ['产后复查'],
+      visitItems: ['血压监测', 'B超检查', '伤口/恶露评估'],
+      createDoctor: '当前医生',
+      remark: '',
     });
-    message.success('出院登记成功！患者状态已更新为已出院');
+    setDischargeModalVisible(true);
+  };
+
+  const handleConfirmDischarge = async () => {
+    if (!dischargeAdviceId) return;
+    try {
+      const values = await dischargeForm.validateFields();
+      const advice = useAppStore.getState().hospitalizationAdvices.find((a) => a.id === dischargeAdviceId);
+      dischargeWithPlan(dischargeAdviceId, {
+        patientId: advice?.patientId || '',
+        patientName: advice?.patientName || '',
+        dischargeDate: values.dischargeDate.format('YYYY-MM-DD'),
+        nextVisitDate: values.nextVisitDate.format('YYYY-MM-DD'),
+        visitTypes: values.visitTypes || [],
+        visitItems: values.visitItems || [],
+        createDoctor: values.createDoctor,
+        remark: values.remark,
+        hospitalizationAdviceId: dischargeAdviceId,
+        admissionDate: advice?.admissionDate,
+      });
+      message.success('出院成功并生成了随访计划！');
+      setDischargeModalVisible(false);
+      setDischargeAdviceId(null);
+      refreshCurrentHospAdvice(dischargeAdviceId);
+    } catch (e) {
+      // 校验失败
+    }
   };
 
   const handleCancelHospitalization = (adviceId: string) => {
@@ -480,6 +601,7 @@ const ConsultationPage: React.FC = () => {
       remark: '取消住院建议',
     });
     message.success('住院建议已取消');
+    refreshCurrentHospAdvice(adviceId);
   };
 
   const consultationColumns: ColumnsType<Consultation> = [
@@ -1831,15 +1953,9 @@ const ConsultationPage: React.FC = () => {
                 </>
               )}
               {currentHospAdvice.status === 'admitted' && (
-                <Popconfirm
-                  title="确认该患者已出院？"
-                  description="确认后将更新患者状态为已出院"
-                  okText="确认出院"
-                  cancelText="取消"
-                  onConfirm={() => handleDischarge(currentHospAdvice.id)}
-                >
-                  <Button type="primary">办理出院</Button>
-                </Popconfirm>
+                <Button type="primary" onClick={() => handleDischarge(currentHospAdvice.id)}>
+                  办理出院
+                </Button>
               )}
               {(currentHospAdvice.status === 'discharged' || currentHospAdvice.status === 'cancelled') && (
                 <Tag color={hospitalizationStatusColors[currentHospAdvice.status]} style={{ margin: 0 }}>
@@ -1957,10 +2073,105 @@ const ConsultationPage: React.FC = () => {
               size="small"
               title={
                 <Space>
+                  <MedicineBoxOutlined style={{ color: '#722ed1' }} />
+                  住院流转闭环
+                </Space>
+              }
+              style={{ marginTop: 12 }}
+            >
+              <Steps
+                direction="vertical"
+                size="small"
+                current={
+                  currentHospAdvice.status === 'discharged'
+                    ? 2
+                    : currentHospAdvice.status === 'admitted'
+                    ? 1
+                    : currentHospAdvice.status === 'cancelled'
+                    ? -1
+                    : 0
+                }
+                items={[
+                  {
+                    title: '住院建议',
+                    description: (
+                      <span>
+                        建议日期：{currentHospAdvice.createDate}（{currentHospAdvice.createDoctor}）
+                      </span>
+                    ),
+                    status:
+                      currentHospAdvice.status === 'cancelled' ? 'error' : 'finish',
+                  },
+                  {
+                    title: '入院登记',
+                    description: currentHospAdvice.admissionDate ? (
+                      <span>入院日期：{currentHospAdvice.admissionDate}</span>
+                    ) : currentHospAdvice.status === 'cancelled' ? (
+                      <Tag color="red">已取消住院</Tag>
+                    ) : (
+                      <span style={{ color: '#999' }}>尚未办理入院</span>
+                    ),
+                  },
+                  {
+                    title: '出院 → 随访',
+                    description:
+                      currentHospAdvice.status === 'discharged'
+                        ? (() => {
+                            const plan = dischargePlans.find(
+                              (d) => d.hospitalizationAdviceId === currentHospAdvice.id,
+                            );
+                            return (
+                              <div style={{ fontSize: 12 }}>
+                                <div>出院日期：{currentHospAdvice.dischargeDate || '—'}</div>
+                                {plan ? (
+                                  <div style={{ marginTop: 6 }}>
+                                    <div>
+                                      随访计划：
+                                      <Tag color="green">
+                                        {plan.nextVisitDate}
+                                      </Tag>
+                                    </div>
+                                    {plan.visitTypes && plan.visitTypes.length > 0 && (
+                                      <div style={{ marginTop: 4 }}>
+                                        类型：{plan.visitTypes.join('、')}
+                                      </div>
+                                    )}
+                                    {plan.visitItems && plan.visitItems.length > 0 && (
+                                      <div style={{ marginTop: 4 }}>
+                                        项目：{plan.visitItems.join('、')}
+                                      </div>
+                                    )}
+                                    {plan.remark && (
+                                      <div style={{ marginTop: 4, color: '#888' }}>
+                                        备注：{plan.remark}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <div style={{ marginTop: 4, color: '#999' }}>
+                                    未关联随访计划
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()
+                        : currentHospAdvice.status === 'admitted'
+                        ? <span style={{ color: '#999' }}>患者住院中，办理出院时即可生成随访计划</span>
+                        : <span style={{ color: '#bbb' }}>—</span>,
+                  },
+                ]}
+              />
+            </Card>
+
+            <Card
+              size="small"
+              title={
+                <Space>
                   <ClockCircleOutlined style={{ color: '#1890ff' }} />
                   状态时间线
                 </Space>
               }
+              style={{ marginTop: 12 }}
             >
               {currentHospAdvice.statusTimeline && currentHospAdvice.statusTimeline.length > 0 ? (
                 <Timeline
@@ -1997,6 +2208,122 @@ const ConsultationPage: React.FC = () => {
           </div>
         )}
       </Drawer>
+
+      <Modal
+        title={
+          <Space>
+            <CheckCircleOutlined />
+            <span>办理出院并生成随访计划</span>
+          </Space>
+        }
+        open={dischargeModalVisible}
+        onOk={handleConfirmDischarge}
+        onCancel={() => {
+          setDischargeModalVisible(false);
+          setDischargeAdviceId(null);
+        }}
+        okText="确认出院并创建随访"
+        cancelText="取消"
+        width={640}
+        destroyOnClose
+      >
+        {dischargeAdviceId &&
+          (() => {
+            const advice = hospitalizationAdvices.find((a) => a.id === dischargeAdviceId);
+            if (!advice) return null;
+            const patient = getPatientById(advice.patientId);
+            return (
+              <div style={{ marginBottom: 16 }}>
+                <Alert
+                  type="info"
+                  showIcon
+                  message={
+                    <Space size={16} wrap>
+                      <span>
+                        <strong>患者：</strong>
+                        {advice.patientName}
+                      </span>
+                      {patient && (
+                        <>
+                          <span>
+                            <strong>孕周：</strong>
+                            孕{patient.gestationalWeeks}+{patient.gestationalDays}周
+                          </span>
+                          <span>
+                            <strong>风险：</strong>
+                            <Tag color={riskLevelColors[patient.riskLevel]} style={{ margin: 0 }}>
+                              {riskLevelLabels[patient.riskLevel]}
+                            </Tag>
+                          </span>
+                        </>
+                      )}
+                      {advice.admissionDate && (
+                        <span>
+                          <strong>入院日期：</strong>
+                          {advice.admissionDate}
+                        </span>
+                      )}
+                    </Space>
+                  }
+                  style={{ marginBottom: 16 }}
+                />
+                <Form
+                  form={dischargeForm}
+                  layout="vertical"
+                  size="middle"
+                >
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <Form.Item
+                        label="出院日期"
+                        name="dischargeDate"
+                        rules={[{ required: true, message: '请选择出院日期' }]}
+                      >
+                        <DatePicker style={{ width: '100%' }} placeholder="选择出院日期" />
+                      </Form.Item>
+                    </Col>
+                    <Col span={12}>
+                      <Form.Item
+                        label="创建医生"
+                        name="createDoctor"
+                        rules={[{ required: true, message: '请输入创建医生姓名' }]}
+                      >
+                        <Input placeholder="请输入当前医生姓名" />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Divider orientation="left" plain style={{ borderColor: '#f0f0f0' }}>
+                    随访计划（产后42天默认）
+                  </Divider>
+                  <Form.Item
+                    label="产后复查日期"
+                    name="nextVisitDate"
+                    rules={[{ required: true, message: '请选择复查日期' }]}
+                  >
+                    <DatePicker style={{ width: '100%' }} placeholder="选择产后复查日期" />
+                  </Form.Item>
+                  <Form.Item
+                    label="复诊类型"
+                    name="visitTypes"
+                    rules={[{ required: true, message: '请至少选择一项复诊类型' }]}
+                  >
+                    <Checkbox.Group options={VISIT_TYPE_OPTIONS} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }} />
+                  </Form.Item>
+                  <Form.Item
+                    label="复查项目"
+                    name="visitItems"
+                    rules={[{ required: true, message: '请至少选择一项复查项目' }]}
+                  >
+                    <Checkbox.Group options={REVIEW_ITEM_OPTIONS} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }} />
+                  </Form.Item>
+                  <Form.Item label="备注说明" name="remark">
+                    <Input.TextArea rows={3} placeholder="请输入出院备注或特殊随访要求（非必填）" />
+                  </Form.Item>
+                </Form>
+              </div>
+            );
+          })()}
+      </Modal>
 
       <style>{`
         @keyframes urgent-blink {

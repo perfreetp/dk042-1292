@@ -212,12 +212,19 @@ export interface DischargePlan {
   patientId: string;
   patientName: string;
   dischargeDate: string;
+  hospitalizationAdviceId?: string;
+  admissionDate?: string;
   followUpItems: FollowUpItem[];
   medications: Medication[];
   lifestyleAdvice: string[];
   warningSigns: string[];
   nextAppointment: string;
   createDoctor: string;
+  createTime?: string;
+  nextVisitDate?: string;
+  visitTypes?: string[];
+  visitItems?: string[];
+  remark?: string;
 }
 
 export interface FollowUpItem {
@@ -264,10 +271,15 @@ export interface QualityControlRecord {
   totalScore: number;
   problems: string[];
   suggestions: string[];
-  status: 'pending' | 'completed' | 'revised';
+  status: 'pending' | 'completed' | 'revised' | 'pending_review' | 'revision_rejected';
+  originalProblems?: string[];
   rectificationNote?: string;
   rectificationDate?: string;
   rectificationDoctor?: string;
+  reviewDate?: string;
+  reviewDoctor?: string;
+  reviewResult?: 'passed' | 'rejected';
+  rejectReason?: string;
 }
 
 export interface QCAuditItem {

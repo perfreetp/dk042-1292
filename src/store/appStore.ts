@@ -58,13 +58,25 @@ interface AppState {
   preFillConsultationPatientId: string | null;
   preFillHospitalizationPatientId: string | null;
 
+  consultationSubTab: 'consultation' | 'hospitalization';
+  openConsultationDetailId: string | null;
+  openHospitalizationDetailId: string | null;
+  openQCDetailId: string | null;
+  detailActiveTabKey: string;
+
   setActiveWindow: (window: ActiveWindow) => void;
-  selectPatient: (patientId: string | null) => void;
+  selectPatient: (patientId: string | null, tabKey?: string) => void;
   selectTemplate: (templateId: string | null) => void;
   setPatientSearchKeyword: (keyword: string) => void;
   setPatientRiskFilter: (level: RiskLevel | 'all') => void;
   setPreFillConsultationPatient: (patientId: string | null) => void;
   setPreFillHospitalizationPatient: (patientId: string | null) => void;
+
+  setConsultationSubTab: (tab: 'consultation' | 'hospitalization') => void;
+  setOpenConsultationDetail: (id: string | null) => void;
+  setOpenHospitalizationDetail: (id: string | null) => void;
+  setOpenQCDetail: (id: string | null) => void;
+  setDetailActiveTabKey: (key: string) => void;
 
   updatePatientRiskLevel: (patientId: string, level: RiskLevel, reason: string) => void;
   updatePatientStatus: (patientId: string, status: Patient['currentStatus'], extra?: Partial<Patient>) => void;
@@ -115,6 +127,14 @@ interface AppState {
     rectificationNote: string,
     rectificationDoctor?: string
   ) => void;
+  reviewQCRecord: (
+    recordId: string,
+    passed: boolean,
+    reviewDoctor: string,
+    rejectReason?: string
+  ) => void;
+
+  dischargeWithPlan: (adviceId: string, dischargePlanData: Partial<DischargePlan>) => DischargePlan;
 
   getWorkReminders: () => WorkReminder[];
 }
@@ -140,6 +160,12 @@ const initialState = {
   patientRiskFilter: 'all' as RiskLevel | 'all',
   preFillConsultationPatientId: null,
   preFillHospitalizationPatientId: null,
+
+  consultationSubTab: 'consultation' as 'consultation' | 'hospitalization',
+  openConsultationDetailId: null,
+  openHospitalizationDetailId: null,
+  openQCDetailId: null,
+  detailActiveTabKey: 'basic',
 };
 
 const genId = (prefix: string) =>
@@ -153,18 +179,25 @@ export const useAppStore = create<AppState>()(
       ...initialState,
 
       setActiveWindow: (window) => set({ activeWindow: window }),
-      selectPatient: (patientId) =>
+      selectPatient: (patientId, tabKey) =>
         set({
           selectedPatientId: patientId,
           activeWindow: patientId ? 'detail' : 'patients',
           preFillConsultationPatientId: null,
           preFillHospitalizationPatientId: null,
+          detailActiveTabKey: tabKey || 'basic',
         }),
       selectTemplate: (templateId) => set({ selectedTemplateId: templateId }),
       setPatientSearchKeyword: (keyword) => set({ patientSearchKeyword: keyword }),
       setPatientRiskFilter: (level) => set({ patientRiskFilter: level }),
       setPreFillConsultationPatient: (patientId) => set({ preFillConsultationPatientId: patientId }),
       setPreFillHospitalizationPatient: (patientId) => set({ preFillHospitalizationPatientId: patientId }),
+
+      setConsultationSubTab: (tab) => set({ consultationSubTab: tab }),
+      setOpenConsultationDetail: (id) => set({ openConsultationDetailId: id }),
+      setOpenHospitalizationDetail: (id) => set({ openHospitalizationDetailId: id }),
+      setOpenQCDetail: (id) => set({ openQCDetailId: id }),
+      setDetailActiveTabKey: (key) => set({ detailActiveTabKey: key }),
 
       updatePatientRiskLevel: (patientId, level, reason) =>
         set((state) => ({
@@ -365,7 +398,8 @@ export const useAppStore = create<AppState>()(
             r.id === recordId
               ? {
                   ...r,
-                  status: 'revised',
+                  status: 'pending_review',
+                  originalProblems: r.originalProblems || [...r.problems],
                   rectificationNote,
                   rectificationDate: nowStr(),
                   rectificationDoctor: rectificationDoctor || '张医生',
@@ -373,6 +407,79 @@ export const useAppStore = create<AppState>()(
               : r
           ),
         })),
+
+      reviewQCRecord: (recordId, passed, reviewDoctor, rejectReason) =>
+        set((state) => ({
+          qualityControlRecords: state.qualityControlRecords.map((r) =>
+            r.id === recordId
+              ? {
+                  ...r,
+                  status: passed ? 'revised' : 'revision_rejected',
+                  reviewDate: nowStr(),
+                  reviewDoctor,
+                  reviewResult: passed ? 'passed' : 'rejected',
+                  rejectReason: passed ? r.rejectReason : rejectReason,
+                }
+              : r
+          ),
+        })),
+
+      dischargeWithPlan: (adviceId, dischargePlanData) => {
+        const state = get();
+        const advice = state.hospitalizationAdvices.find((a) => a.id === adviceId);
+        if (!advice) return {} as DischargePlan;
+
+        const newPlan: DischargePlan = {
+          id: genId('DP'),
+          patientId: advice.patientId,
+          patientName: advice.patientName,
+          hospitalizationAdviceId: adviceId,
+          admissionDate: advice.admissionDate,
+          dischargeDate: new Date().toISOString().split('T')[0],
+          followUpItems: dischargePlanData.followUpItems || [],
+          medications: dischargePlanData.medications || [],
+          lifestyleAdvice: dischargePlanData.lifestyleAdvice || [],
+          warningSigns: dischargePlanData.warningSigns || [],
+          nextAppointment: dischargePlanData.nextAppointment || '',
+          createDoctor: dischargePlanData.createDoctor || '张医生',
+          createTime: nowStr(),
+        };
+
+        const dischargeDateStr = new Date().toISOString().split('T')[0];
+        const newLog: HospitalizationStatusLog = {
+          status: 'discharged',
+          time: nowStr(),
+          doctor: dischargePlanData.createDoctor || '张医生',
+          remark: '已办理出院并生成随访计划',
+        };
+
+        set((s) => ({
+          hospitalizationAdvices: s.hospitalizationAdvices.map((a) =>
+            a.id === adviceId
+              ? {
+                  ...a,
+                  status: 'discharged',
+                  dischargeDate: dischargeDateStr,
+                  statusTimeline: [...(a.statusTimeline || []), newLog],
+                }
+              : a
+          ),
+          patients: s.patients.map((p) =>
+            p.id === advice.patientId
+              ? {
+                  ...p,
+                  currentStatus: 'discharged',
+                  dischargeDate: dischargeDateStr,
+                  nextVisitDate: newPlan.nextAppointment,
+                  lastUpdateTime: nowStr(),
+                }
+              : p
+          ),
+          dischargePlans: [newPlan, ...s.dischargePlans],
+        }));
+
+        return newPlan;
+      },
 
       getWorkReminders: () => {
         const state = get();
@@ -452,23 +559,48 @@ export const useAppStore = create<AppState>()(
             });
           });
 
-        // 4. 待整改质控
+        // 4. 质控待办（待审核/待整改/整改退回/待复核）
         state.qualityControlRecords
-          .filter((r) => r.status === 'pending' || r.status === 'completed')
+          .filter((r) =>
+            r.status === 'pending' ||
+            r.status === 'completed' ||
+            r.status === 'revision_rejected' ||
+            r.status === 'pending_review'
+          )
           .forEach((r) => {
             const hasProblems = r.problems && r.problems.length > 0;
+            let title = '质控待办';
+            let urgency: 'high' | 'medium' | 'low' = 'low';
+            switch (r.status) {
+              case 'pending':
+                title = '待审核质控';
+                urgency = 'medium';
+                break;
+              case 'completed':
+                title = '质控待整改';
+                urgency = 'low';
+                break;
+              case 'revision_rejected':
+                title = '质控整改被退回';
+                urgency = 'high';
+                break;
+              case 'pending_review':
+                title = '质控待复核';
+                urgency = 'medium';
+                break;
+            }
             if (hasProblems) {
               reminders.push({
                 id: `Q-${r.id}`,
                 type: 'qc',
-                title: r.status === 'pending' ? '待审核质控' : '质控待整改',
+                title,
                 subtitle: `${r.patientName} · ${r.auditDate} · ${r.problems.length}个问题`,
                 patientId: r.patientId,
                 patientName: r.patientName,
                 recordId: r.id,
-                urgency: r.status === 'pending' ? 'medium' : 'low',
+                urgency,
                 deadline: r.auditDate,
-                extra: { totalScore: r.totalScore, problems: r.problems },
+                extra: { totalScore: r.totalScore, problems: r.problems, rejectReason: r.rejectReason },
               });
             }
           });
@@ -527,6 +659,12 @@ export const useAppStore = create<AppState>()(
           state.preFillHospitalizationPatientId = null;
           state.patientSearchKeyword = '';
           state.patientRiskFilter = 'all';
+
+          state.consultationSubTab = 'consultation';
+          state.openConsultationDetailId = null;
+          state.openHospitalizationDetailId = null;
+          state.openQCDetailId = null;
+          state.detailActiveTabKey = 'basic';
         }
       },
     }
