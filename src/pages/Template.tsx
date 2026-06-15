@@ -21,6 +21,7 @@ import {
   Row,
   Col,
   Alert,
+  Form,
 } from 'antd';
 import {
   SearchOutlined,
@@ -108,18 +109,16 @@ const Template: React.FC = () => {
     selectedTemplateId,
     selectTemplate,
     setActiveWindow,
+    applyTemplateToPatient,
+    selectPatient,
   } = useAppStore();
 
   const [searchKeyword, setSearchKeyword] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [applyModalVisible, setApplyModalVisible] = useState(false);
-  const [selectedPatientId, setSelectedPatientId] = useState<string | undefined>();
-  const [nextVisitDate, setNextVisitDate] = useState<Dayjs | null>(null);
-  const [visitTypes, setVisitTypes] = useState<string[]>([]);
-  const [reviewItems, setReviewItems] = useState<string[]>([]);
-  const [reminders, setReminders] = useState('');
   const [editHintVisible, setEditHintVisible] = useState(false);
+  const [applyForm] = Form.useForm();
 
   const filteredTemplates = useMemo(() => {
     return treatmentTemplates.filter((t) => {
@@ -170,31 +169,24 @@ const Template: React.FC = () => {
 
   const handleApplyTemplate = () => {
     if (!selectedTemplate) return;
+    applyForm.resetFields();
     setApplyModalVisible(true);
-    setSelectedPatientId(undefined);
-    setNextVisitDate(null);
-    setVisitTypes([]);
-    setReviewItems([]);
-    setReminders('');
   };
 
-  const handleConfirmApply = () => {
-    if (!selectedPatientId) {
-      message.warning('请选择患者');
-      return;
-    }
-    if (!nextVisitDate) {
-      message.warning('请选择下次复诊日期');
-      return;
-    }
-    if (visitTypes.length === 0) {
-      message.warning('请至少选择一种复诊类型');
-      return;
-    }
-    const patient = patients.find((p) => p.id === selectedPatientId);
-    message.success(
-      `已成功将「${selectedTemplate?.name}」应用到患者「${patient?.name}」，复诊时间已安排`
+  const handleConfirmApply = async (values: any) => {
+    if (!selectedTemplate) return;
+    applyTemplateToPatient(
+      values.patientId,
+      selectedTemplate.id,
+      selectedTemplate.name,
+      values.nextVisitDate.format('YYYY-MM-DD'),
+      values.visitTypes || [],
+      values.visitItems || [],
+      values.remark
     );
+    selectPatient(values.patientId);
+    setActiveWindow('detail');
+    message.success(`已应用模板「${selectedTemplate.name}」并安排复诊`);
     setApplyModalVisible(false);
   };
 
@@ -823,122 +815,181 @@ const Template: React.FC = () => {
         }
         open={applyModalVisible}
         onCancel={() => setApplyModalVisible(false)}
-        onOk={handleConfirmApply}
+        onOk={() => applyForm.submit()}
         width={640}
         okText="确认应用"
         cancelText="取消"
         okButtonProps={{ type: 'primary', size: 'large' }}
         cancelButtonProps={{ size: 'large' }}
+        destroyOnClose
       >
-        <Space direction="vertical" style={{ width: '100%' }} size={18}>
-          <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>
-              <UserOutlined style={{ marginRight: 6 }} />
-              选择患者 <Text type="danger">*</Text>
-            </Text>
-            <Select
-              showSearch
-              placeholder="搜索并选择患者（姓名/ID/电话）"
-              optionFilterProp="label"
-              size="large"
-              style={{ width: '100%' }}
-              value={selectedPatientId}
-              onChange={setSelectedPatientId}
-              options={patients.map((p) => ({
-                value: p.id,
-                label: `${p.name} (${p.id}) - 孕${p.gestationalWeeks}+${p.gestationalDays}周 - ${riskLevelLabels[p.riskLevel]}`,
-              }))}
-            />
-          </div>
-
-          <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>
-              <CalendarOutlined style={{ marginRight: 6 }} />
-              下次复诊日期 <Text type="danger">*</Text>
-            </Text>
-            <DatePicker
-              size="large"
-              style={{ width: '100%' }}
-              placeholder="请选择复诊日期"
-              disabledDate={(current) => current && current < dayjs().startOf('day')}
-              value={nextVisitDate}
-              onChange={setNextVisitDate}
-              format="YYYY-MM-DD"
-            />
-          </div>
-
-          <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>
-              <ClockCircleOutlined style={{ marginRight: 6 }} />
-              复诊类型 <Text type="danger">*</Text>
-              <Text type="secondary" style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>
-                （多选）
-              </Text>
-            </Text>
-            <Checkbox.Group
-              options={VISIT_TYPE_OPTIONS}
-              value={visitTypes}
-              onChange={(values) => setVisitTypes(values as string[])}
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '12px 24px',
-              }}
-            />
-          </div>
-
-          <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>
-              <AuditOutlined style={{ marginRight: 6 }} />
-              复查项目
-              <Text type="secondary" style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>
-                （多选）
-              </Text>
-            </Text>
-            <Checkbox.Group
-              options={REVIEW_ITEM_OPTIONS}
-              value={reviewItems}
-              onChange={(values) => setReviewItems(values as string[])}
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '12px 24px',
-              }}
-            />
-          </div>
-
-          <div>
-            <Text strong style={{ marginBottom: 8, display: 'block' }}>
-              <WarningOutlined style={{ marginRight: 6, color: '#faad14' }} />
-              重要提醒事项
-            </Text>
-            <TextArea
-              rows={3}
-              placeholder="请填写需要特别提醒患者的注意事项，如饮食、用药、休息、异常情况处理等..."
-              value={reminders}
-              onChange={(e) => setReminders(e.target.value)}
-              showCount
-              maxLength={300}
-            />
-          </div>
-
-          {selectedTemplate && (
-            <Alert
-              type="info"
-              showIcon
-              message={
-                <Text>
-                  即将应用模板：<Text strong>{selectedTemplate.name}</Text>
-                </Text>
+        <Form
+          form={applyForm}
+          layout="vertical"
+          onFinish={handleConfirmApply}
+          initialValues={{
+            nextVisitDate: dayjs().add(1, 'week'),
+            visitTypes: ['routine_check'],
+            visitItems: ['bp', 'measurements'],
+            remark: '',
+          }}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={18}>
+            <Form.Item
+              name="patientId"
+              label={
+                <span>
+                  <UserOutlined style={{ marginRight: 6 }} />
+                  选择患者 <Text type="danger">*</Text>
+                </span>
               }
-              description={
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  应用后将在患者病历中记录该处置方案，并在复诊计划中同步提醒
-                </Text>
+              rules={[{ required: true, message: '请选择患者' }]}
+            >
+              <Select
+                showSearch
+                placeholder="搜索并选择患者（姓名/ID/电话）"
+                optionFilterProp="label"
+                size="large"
+                style={{ width: '100%' }}
+                options={patients.map((p) => ({
+                  value: p.id,
+                  label: `${p.name} (${p.id}) - 孕${p.gestationalWeeks}+${p.gestationalDays}周 - ${riskLevelLabels[p.riskLevel]}`,
+                }))}
+              />
+            </Form.Item>
+
+            <Form.Item noStyle shouldUpdate={(prev, curr) => prev.patientId !== curr.patientId}>
+              {({ getFieldValue }) => {
+                const patientId = getFieldValue('patientId');
+                const patient = patients.find((p) => p.id === patientId);
+                if (!patient) return null;
+                return (
+                  <Alert
+                    type="success"
+                    showIcon
+                    message={
+                      <Text>
+                        已选择患者：<Text strong>{patient.name}</Text>
+                      </Text>
+                    }
+                    description={
+                      <Space direction="vertical" size={4} style={{ marginTop: 4 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          当前孕周：孕{patient.gestationalWeeks}+{patient.gestationalDays}周
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          预产期：{patient.dueDate}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          风险等级：{riskLevelLabels[patient.riskLevel]}
+                        </Text>
+                      </Space>
+                    }
+                    style={{ marginBottom: 0 }}
+                  />
+                );
+              }}
+            </Form.Item>
+
+            <Form.Item
+              name="nextVisitDate"
+              label={
+                <span>
+                  <CalendarOutlined style={{ marginRight: 6 }} />
+                  下次复诊日期 <Text type="danger">*</Text>
+                </span>
               }
-            />
-          )}
-        </Space>
+              rules={[{ required: true, message: '请选择下次复诊日期' }]}
+            >
+              <DatePicker
+                size="large"
+                style={{ width: '100%' }}
+                placeholder="请选择复诊日期"
+                disabledDate={(current) => current && current < dayjs().startOf('day')}
+                format="YYYY-MM-DD"
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="visitTypes"
+              label={
+                <span>
+                  <ClockCircleOutlined style={{ marginRight: 6 }} />
+                  复诊类型 <Text type="danger">*</Text>
+                  <Text type="secondary" style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>
+                    （多选）
+                  </Text>
+                </span>
+              }
+              rules={[{ required: true, message: '请至少选择一种复诊类型' }]}
+            >
+              <Checkbox.Group
+                options={VISIT_TYPE_OPTIONS}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '12px 24px',
+                }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="visitItems"
+              label={
+                <span>
+                  <AuditOutlined style={{ marginRight: 6 }} />
+                  复查项目
+                  <Text type="secondary" style={{ marginLeft: 8, fontSize: 12, fontWeight: 400 }}>
+                    （多选）
+                  </Text>
+                </span>
+              }
+            >
+              <Checkbox.Group
+                options={REVIEW_ITEM_OPTIONS}
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '12px 24px',
+                }}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="remark"
+              label={
+                <span>
+                  <WarningOutlined style={{ marginRight: 6, color: '#faad14' }} />
+                  重要提醒事项
+                </span>
+              }
+            >
+              <TextArea
+                rows={3}
+                placeholder="请填写需要特别提醒患者的注意事项，如饮食、用药、休息、异常情况处理等..."
+                showCount
+                maxLength={300}
+              />
+            </Form.Item>
+
+            {selectedTemplate && (
+              <Alert
+                type="info"
+                showIcon
+                message={
+                  <Text>
+                    即将应用模板：<Text strong>{selectedTemplate.name}</Text>
+                  </Text>
+                }
+                description={
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    应用后将在患者病历中记录该处置方案，并在复诊计划中同步提醒
+                  </Text>
+                }
+              />
+            )}
+          </Space>
+        </Form>
       </Modal>
 
       <Modal

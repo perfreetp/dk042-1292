@@ -21,6 +21,8 @@ import {
   InputNumber,
   Divider,
   Statistic,
+  Alert,
+  Typography,
 } from 'antd';
 import {
   PlusOutlined,
@@ -39,6 +41,7 @@ import {
   TeamOutlined,
   RiseOutlined,
   BarChartOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table/interface';
 import {
@@ -67,6 +70,7 @@ import type { QualityControlRecord, QCAuditItem, RiskLevel } from '../types';
 const { Option } = Select;
 const { RangePicker } = DatePicker;
 const { TextArea } = Input;
+const { Text } = Typography;
 
 const auditTypeLabels: Record<QualityControlRecord['auditType'], string> = {
   random: '随机抽查',
@@ -113,6 +117,7 @@ const QC: React.FC = () => {
     statistics,
     patients,
     addQCRecord,
+    rectifyQCRecord,
     selectPatient,
     setActiveWindow,
   } = useAppStore();
@@ -130,6 +135,10 @@ const QC: React.FC = () => {
   const [problemList, setProblemList] = useState<string[]>(['']);
   const [suggestionList, setSuggestionList] = useState<string[]>(['']);
   const [auditScores, setAuditScores] = useState<Record<string, number>>({});
+
+  const [rectifyModalVisible, setRectifyModalVisible] = useState(false);
+  const [rectifyingRecord, setRectifyingRecord] = useState<QualityControlRecord | null>(null);
+  const [rectifyForm] = Form.useForm();
 
   const auditors = useMemo(() => {
     const set = new Set(qualityControlRecords.map((r) => r.auditor));
@@ -166,7 +175,33 @@ const QC: React.FC = () => {
   };
 
   const handleRevise = (record: QualityControlRecord) => {
-    message.success(`已标记「${record.id}」为整改中`);
+    setRectifyingRecord(record);
+    rectifyForm.resetFields();
+    rectifyForm.setFieldsValue({
+      rectificationDoctor: '张医生',
+    });
+    setRectifyModalVisible(true);
+  };
+
+  const handleRectifySubmit = async (values: any) => {
+    if (!rectifyingRecord) return;
+    rectifyQCRecord(
+      rectifyingRecord.id,
+      values.rectificationNote,
+      values.rectificationDoctor
+    );
+    message.success('整改完成！状态已更新');
+    setRectifyModalVisible(false);
+    if (currentRecord && currentRecord.id === rectifyingRecord.id) {
+      setCurrentRecord({
+        ...rectifyingRecord,
+        status: 'revised',
+        rectificationNote: values.rectificationNote,
+        rectificationDate: new Date().toLocaleString('zh-CN'),
+        rectificationDoctor: values.rectificationDoctor,
+      });
+    }
+    setRectifyingRecord(null);
   };
 
   const handleExport = () => {
@@ -847,7 +882,7 @@ const QC: React.FC = () => {
           <Space>
             {currentRecord?.status === 'pending' && (
               <Button type="primary" icon={<ToolOutlined />} onClick={() => handleRevise(currentRecord)}>
-                标记整改
+                整改
               </Button>
             )}
             <Button onClick={() => setDetailVisible(false)}>关闭</Button>
@@ -1020,6 +1055,42 @@ const QC: React.FC = () => {
                     </List.Item>
                   )}
                 />
+              </Card>
+            )}
+
+            {currentRecord.status === 'revised' && currentRecord.rectificationNote && (
+              <Card
+                size="small"
+                style={{ borderRadius: 8, background: '#e6f7ff', border: '1px solid #91d5ff' }}
+                title={
+                  <Space>
+                    <CheckCircleOutlined style={{ color: '#1890ff' }} />
+                    <span style={{ color: '#1890ff' }}>整改信息</span>
+                  </Space>
+                }
+              >
+                <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                  <div>
+                    <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改说明</div>
+                    <div style={{ color: '#333', fontSize: 13, lineHeight: 1.6 }}>
+                      {currentRecord.rectificationNote}
+                    </div>
+                  </div>
+                  <Row gutter={[16, 8]}>
+                    <Col span={12}>
+                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改时间</div>
+                      <div style={{ color: '#333', fontWeight: 500 }}>
+                        {currentRecord.rectificationDate || '-'}
+                      </div>
+                    </Col>
+                    <Col span={12}>
+                      <div style={{ color: '#666', fontSize: 12, marginBottom: 4 }}>整改医生</div>
+                      <div style={{ color: '#333', fontWeight: 500 }}>
+                        {currentRecord.rectificationDoctor || '-'}
+                      </div>
+                    </Col>
+                  </Row>
+                </Space>
               </Card>
             )}
           </div>
@@ -1272,6 +1343,136 @@ const QC: React.FC = () => {
               添加建议
             </Button>
           </div>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={
+          <Space>
+            <ToolOutlined />
+            <span>整改质控问题</span>
+          </Space>
+        }
+        open={rectifyModalVisible}
+        onOk={() => rectifyForm.submit()}
+        onCancel={() => {
+          setRectifyModalVisible(false);
+          setRectifyingRecord(null);
+        }}
+        okText="提交整改"
+        cancelText="取消"
+        width={640}
+        destroyOnClose
+      >
+        <Form
+          form={rectifyForm}
+          layout="vertical"
+          onFinish={handleRectifySubmit}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size={16}>
+            {rectifyingRecord && (
+              <Alert
+                type="info"
+                showIcon
+                message="整改患者信息"
+                description={
+                  <Space direction="vertical" size={4} style={{ marginTop: 4 }}>
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>患者姓名：</Text>
+                      <Text strong>{rectifyingRecord.patientName}</Text>
+                    </div>
+                    <Row gutter={[16, 4]}>
+                      <Col span={8}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>抽查编号：</Text>
+                        <Text strong style={{ color: '#1890ff' }}>{rectifyingRecord.id}</Text>
+                      </Col>
+                      <Col span={8}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>抽查日期：</Text>
+                        <Text>{rectifyingRecord.auditDate}</Text>
+                      </Col>
+                      <Col span={8}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>原总分：</Text>
+                        <Text strong style={{ color: getScoreColor(rectifyingRecord.totalScore) }}>
+                          {rectifyingRecord.totalScore}分
+                        </Text>
+                      </Col>
+                    </Row>
+                    <div>
+                      <Text type="secondary" style={{ fontSize: 12 }}>原状态：</Text>
+                      <Tag color={statusColors[rectifyingRecord.status]}>
+                        {statusLabels[rectifyingRecord.status]}
+                      </Tag>
+                    </div>
+                  </Space>
+                }
+              />
+            )}
+
+            {rectifyingRecord && rectifyingRecord.problems.length > 0 && (
+              <Card
+                size="small"
+                style={{ borderRadius: 8, borderLeft: '4px solid #f5222d' }}
+                title={
+                  <Space>
+                    <StopOutlined style={{ color: '#f5222d' }} />
+                    <span>原问题列表</span>
+                  </Space>
+                }
+              >
+                <List
+                  size="small"
+                  dataSource={rectifyingRecord.problems}
+                  renderItem={(item, index) => (
+                    <List.Item style={{ borderBottom: index < rectifyingRecord!.problems.length - 1 ? '1px solid #f0f0f0' : 'none', padding: '6px 0' }}>
+                      <List.Item.Meta
+                        avatar={
+                          <Badge
+                            count={index + 1}
+                            style={{ backgroundColor: '#f5222d', minWidth: 20, height: 20, fontSize: 11 }}
+                          />
+                        }
+                        description={<span style={{ color: '#333', fontSize: 13 }}>{item}</span>}
+                      />
+                    </List.Item>
+                  )}
+                />
+              </Card>
+            )}
+
+            <Form.Item
+              name="rectificationNote"
+              label={
+                <span>
+                  <FileTextOutlined style={{ marginRight: 6 }} />
+                  整改说明 <Text type="danger">*</Text>
+                </span>
+              }
+              rules={[
+                { required: true, message: '请填写整改说明' },
+                { max: 500, message: '整改说明不能超过500字' },
+              ]}
+            >
+              <TextArea
+                rows={5}
+                placeholder="请详细描述整改措施、处理过程和结果..."
+                showCount
+                maxLength={500}
+              />
+            </Form.Item>
+
+            <Form.Item
+              name="rectificationDoctor"
+              label={
+                <span>
+                  <UserOutlined style={{ marginRight: 6 }} />
+                  整改医生
+                </span>
+              }
+              rules={[{ required: true, message: '请填写整改医生' }]}
+            >
+              <Input placeholder="请填写整改医生姓名" />
+            </Form.Item>
+          </Space>
         </Form>
       </Modal>
     </div>

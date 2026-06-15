@@ -72,6 +72,8 @@ const Patients: React.FC = () => {
     updatePatientRiskLevel,
     markKeyCase,
     setActiveWindow,
+    setPreFillConsultationPatient,
+    setPreFillHospitalizationPatient,
   } = useAppStore();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -411,12 +413,28 @@ const Patients: React.FC = () => {
             调整风险
           </Button>
           <Tooltip title="申请会诊">
-            <Button type="link" size="small" icon={<TeamIcon />}>
+            <Button
+              type="link"
+              size="small"
+              icon={<TeamIcon />}
+              onClick={() => {
+                setPreFillConsultationPatient(record.id);
+                setActiveWindow('consultation');
+              }}
+            >
               申请会诊
             </Button>
           </Tooltip>
           <Tooltip title="安排住院">
-            <Button type="link" size="small" icon={<HomeOutlined />}>
+            <Button
+              type="link"
+              size="small"
+              icon={<HomeOutlined />}
+              onClick={() => {
+                setPreFillHospitalizationPatient(record.id);
+                setActiveWindow('consultation');
+              }}
+            >
               安排住院
             </Button>
           </Tooltip>

@@ -27,6 +27,11 @@ export interface Patient {
   dischargeDate?: string;
   dischargeDiagnosis?: string;
   nextVisitDate: string;
+  nextVisitTypes?: string[];
+  nextVisitItems?: string[];
+  appliedTemplateId?: string;
+  appliedTemplateName?: string;
+  appliedTemplateTime?: string;
   attendingDoctor: string;
   tags: string[];
   isKeyCase: boolean;
@@ -237,6 +242,9 @@ export interface QualityControlRecord {
   problems: string[];
   suggestions: string[];
   status: 'pending' | 'completed' | 'revised';
+  rectificationNote?: string;
+  rectificationDate?: string;
+  rectificationDoctor?: string;
 }
 
 export interface QCAuditItem {

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Tabs,
   Card,
@@ -22,6 +22,7 @@ import {
   Tooltip,
   Alert,
   Descriptions,
+  Popconfirm,
 } from 'antd';
 import {
   PlusOutlined,
@@ -172,13 +173,37 @@ const ConsultationPage: React.FC = () => {
     hospitalizationAdvices,
     patients,
     addConsultation,
-    updateConsultationStatus,
     addHospitalizationAdvice,
     selectPatient,
     setActiveWindow,
+    preFillConsultationPatientId,
+    preFillHospitalizationPatientId,
+    setPreFillConsultationPatient,
+    setPreFillHospitalizationPatient,
+    updateHospitalizationAdvice,
+    updateHospitalizationStatus,
+    replyConsultation,
   } = useAppStore();
 
-  const [activeTab, setActiveTab] = useState('consultation');
+  const [activeTab, setActiveTab] = useState('consultations');
+
+  useEffect(() => {
+    if (preFillConsultationPatientId && typeof preFillConsultationPatientId === 'string') {
+      setActiveTab('consultations');
+      setTimeout(() => {
+        handleOpenCreateModal(preFillConsultationPatientId);
+      }, 0);
+    }
+  }, [preFillConsultationPatientId]);
+
+  useEffect(() => {
+    if (preFillHospitalizationPatientId) {
+      setActiveTab('hospital');
+      setTimeout(() => {
+        handleOpenHospCreate(preFillHospitalizationPatientId);
+      }, 0);
+    }
+  }, [preFillHospitalizationPatientId]);
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -247,13 +272,18 @@ const ConsultationPage: React.FC = () => {
     setActiveWindow('detail');
   };
 
-  const handleOpenCreateModal = () => {
+  const handleOpenCreateModal = (_e?: any, preFillPatientId?: string) => {
     consultForm.resetFields();
-    consultForm.setFieldsValue({
+    const values: Record<string, any> = {
       type: 'routine',
       requestDepartment: '产科',
       timeLimit: '24h',
-    });
+    };
+    const patientId = typeof _e === 'string' ? _e : preFillPatientId;
+    if (patientId) {
+      values.patientId = patientId;
+    }
+    consultForm.setFieldsValue(values);
     setCreateModalVisible(true);
   };
 
@@ -283,6 +313,7 @@ const ConsultationPage: React.FC = () => {
       };
       addConsultation(newConsultation);
       message.success('会诊申请已提交');
+      setPreFillConsultationPatient(null);
       setCreateModalVisible(false);
     } catch {
       // validation error
@@ -298,9 +329,10 @@ const ConsultationPage: React.FC = () => {
 
   const handleAcceptConsultation = () => {
     if (currentConsultation) {
-      updateConsultationStatus(currentConsultation.id, 'accepted');
+      replyConsultation(currentConsultation.id, 'accepted', replyOpinion, replySuggestions);
+      const updated = consultations.find((c) => c.id === currentConsultation.id);
+      if (updated) setCurrentConsultation({ ...updated });
       message.success('已接受会诊');
-      setCurrentConsultation({ ...currentConsultation, status: 'accepted' });
     }
   };
 
@@ -313,7 +345,7 @@ const ConsultationPage: React.FC = () => {
       okButtonProps: { danger: true },
       onOk: () => {
         if (currentConsultation) {
-          updateConsultationStatus(currentConsultation.id, 'rejected');
+          replyConsultation(currentConsultation.id, 'rejected', replyOpinion);
           message.success('已拒绝会诊');
           setDetailDrawerVisible(false);
         }
@@ -327,16 +359,11 @@ const ConsultationPage: React.FC = () => {
       return;
     }
     if (currentConsultation) {
-      const updated: Consultation = {
-        ...currentConsultation,
-        status: 'completed',
-        consultOpinion: replyOpinion,
-        suggestions: replySuggestions,
-        consultDate: new Date().toLocaleString('zh-CN'),
-      };
-      updateConsultationStatus(currentConsultation.id, 'completed', replyOpinion);
-      setCurrentConsultation(updated);
+      replyConsultation(currentConsultation.id, 'completed', replyOpinion, replySuggestions);
+      const updated = consultations.find((c) => c.id === currentConsultation.id);
+      if (updated) setCurrentConsultation({ ...updated });
       message.success('会诊已完成');
+      setDetailDrawerVisible(false);
     }
   };
 
@@ -344,13 +371,18 @@ const ConsultationPage: React.FC = () => {
     message.info(`已向${consultation.consultDepartment}发送催办提醒`);
   };
 
-  const handleOpenHospCreate = () => {
+  const handleOpenHospCreate = (_e?: any, preFillPatientId?: string) => {
     hospForm.resetFields();
-    hospForm.setFieldsValue({
+    const values: Record<string, any> = {
       urgency: 'routine',
       department: '产科',
       estimatedDays: 5,
-    });
+    };
+    const patientId = typeof _e === 'string' ? _e : preFillPatientId;
+    if (patientId) {
+      values.patientId = patientId;
+    }
+    hospForm.setFieldsValue(values);
     setEditHospAdvice(null);
     setCreateHospModalVisible(true);
   };
@@ -384,6 +416,15 @@ const ConsultationPage: React.FC = () => {
         return;
       }
       if (editHospAdvice) {
+        updateHospitalizationAdvice(editHospAdvice.id, {
+          urgency: values.urgency,
+          department: values.department,
+          estimatedDays: values.estimatedDays,
+          reason: values.reason,
+          examinations: values.examinations || [],
+          treatments: values.treatments || [],
+          notes: values.notes || '',
+        });
         message.success('住院建议已更新');
       } else {
         const newAdvice: HospitalizationAdvice = {
@@ -404,22 +445,21 @@ const ConsultationPage: React.FC = () => {
         addHospitalizationAdvice(newAdvice);
         message.success('住院建议已创建');
       }
+      setPreFillHospitalizationPatient(null);
       setCreateHospModalVisible(false);
     } catch {
       // validation error
     }
   };
 
-  const handleTransferToAdmission = (advice: HospitalizationAdvice) => {
-    Modal.confirm({
-      title: '转住院登记',
-      content: `确认将 ${advice.patientName} 的住院建议转为住院登记？`,
-      okText: '确认转科',
-      cancelText: '取消',
-      onOk: () => {
-        message.success('已转住院登记，通知住院部准备床位');
-      },
+  const handleTransferToAdmission = (adviceId: string) => {
+    const advice = hospitalizationAdvices.find((a) => a.id === adviceId);
+    if (!advice) return;
+    updateHospitalizationStatus(adviceId, 'admitted', {
+      patientStatus: 'hospitalized',
+      admissionDate: new Date().toLocaleDateString('zh-CN'),
     });
+    message.success('住院登记成功！患者状态已更新为住院中');
   };
 
   const consultationColumns: ColumnsType<Consultation> = [
@@ -649,7 +689,7 @@ const ConsultationPage: React.FC = () => {
           onChange={setActiveTab}
           items={[
             {
-              key: 'consultation',
+              key: 'consultations',
               label: (
                 <Space>
                   <TeamOutlined />
@@ -755,7 +795,7 @@ const ConsultationPage: React.FC = () => {
               ),
             },
             {
-              key: 'hospitalization',
+              key: 'hospital',
               label: (
                 <Space>
                   <HomeOutlined />
@@ -1039,14 +1079,21 @@ const ConsultationPage: React.FC = () => {
                                       >
                                         编辑
                                       </Button>
-                                      <Button
-                                        type="link"
-                                        size="small"
-                                        icon={<SendOutlined />}
-                                        onClick={() => handleTransferToAdmission(advice)}
+                                      <Popconfirm
+                                        title="确认已为该患者办理住院？"
+                                        description="确认后将更新患者状态为住院中"
+                                        okText="确认办理"
+                                        cancelText="取消"
+                                        onConfirm={() => handleTransferToAdmission(advice.id)}
                                       >
-                                        转住院
-                                      </Button>
+                                        <Button
+                                          type="link"
+                                          size="small"
+                                          icon={<SendOutlined />}
+                                        >
+                                          转住院登记
+                                        </Button>
+                                      </Popconfirm>
                                     </>
                                   )}
                                 </Space>
@@ -1073,12 +1120,44 @@ const ConsultationPage: React.FC = () => {
         }
         open={createModalVisible}
         onOk={handleCreateConsultation}
-        onCancel={() => setCreateModalVisible(false)}
+        onCancel={() => {
+          setPreFillConsultationPatient(null);
+          setCreateModalVisible(false);
+        }}
         okText="提交申请"
         cancelText="取消"
         width={720}
         destroyOnClose
       >
+        {preFillConsultationPatientId && getPatientById(preFillConsultationPatientId) && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={
+              <Space size={16} wrap>
+                <span>
+                  <strong>姓名：</strong>
+                  {getPatientById(preFillConsultationPatientId)!.name}
+                </span>
+                <span>
+                  <strong>孕周：</strong>
+                  孕{getPatientById(preFillConsultationPatientId)!.gestationalWeeks}+
+                  {getPatientById(preFillConsultationPatientId)!.gestationalDays}周
+                </span>
+                <span>
+                  <strong>风险等级：</strong>
+                  <Tag
+                    color={getPatientById(preFillConsultationPatientId)!.riskLevel}
+                    style={{ margin: 0 }}
+                  >
+                    {riskLevelLabels[getPatientById(preFillConsultationPatientId)!.riskLevel].replace(/（.*?）/g, '')}
+                  </Tag>
+                </span>
+              </Space>
+            }
+          />
+        )}
         <Form form={consultForm} layout="vertical">
           <Row gutter={16}>
             <Col span={12}>
@@ -1454,12 +1533,73 @@ const ConsultationPage: React.FC = () => {
         }
         open={createHospModalVisible}
         onOk={handleSubmitHospAdvice}
-        onCancel={() => setCreateHospModalVisible(false)}
+        onCancel={() => {
+          setPreFillHospitalizationPatient(null);
+          setCreateHospModalVisible(false);
+        }}
         okText={editHospAdvice ? '保存修改' : '提交建议'}
         cancelText="取消"
         width={720}
         destroyOnClose
       >
+        {preFillHospitalizationPatientId && getPatientById(preFillHospitalizationPatientId) && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={
+              <Space size={16} wrap>
+                <span>
+                  <strong>姓名：</strong>
+                  {getPatientById(preFillHospitalizationPatientId)!.name}
+                </span>
+                <span>
+                  <strong>孕周：</strong>
+                  孕{getPatientById(preFillHospitalizationPatientId)!.gestationalWeeks}+
+                  {getPatientById(preFillHospitalizationPatientId)!.gestationalDays}周
+                </span>
+                <span>
+                  <strong>风险等级：</strong>
+                  <Tag
+                    color={getPatientById(preFillHospitalizationPatientId)!.riskLevel}
+                    style={{ margin: 0 }}
+                  >
+                    {riskLevelLabels[getPatientById(preFillHospitalizationPatientId)!.riskLevel].replace(/（.*?）/g, '')}
+                  </Tag>
+                </span>
+              </Space>
+            }
+          />
+        )}
+        {editHospAdvice && getPatientById(editHospAdvice.patientId) && (
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 16 }}
+            message={
+              <Space size={16} wrap>
+                <span>
+                  <strong>姓名：</strong>
+                  {getPatientById(editHospAdvice.patientId)!.name}
+                </span>
+                <span>
+                  <strong>孕周：</strong>
+                  孕{getPatientById(editHospAdvice.patientId)!.gestationalWeeks}+
+                  {getPatientById(editHospAdvice.patientId)!.gestationalDays}周
+                </span>
+                <span>
+                  <strong>风险等级：</strong>
+                  <Tag
+                    color={getPatientById(editHospAdvice.patientId)!.riskLevel}
+                    style={{ margin: 0 }}
+                  >
+                    {riskLevelLabels[getPatientById(editHospAdvice.patientId)!.riskLevel].replace(/（.*?）/g, '')}
+                  </Tag>
+                </span>
+              </Space>
+            }
+          />
+        )}
         <Form form={hospForm} layout="vertical">
           <Row gutter={16}>
             <Col span={12}>
@@ -1644,13 +1784,20 @@ const ConsultationPage: React.FC = () => {
               }}>
                 编辑
               </Button>
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={() => handleTransferToAdmission(currentHospAdvice)}
+              <Popconfirm
+                title="确认已为该患者办理住院？"
+                description="确认后将更新患者状态为住院中"
+                okText="确认办理"
+                cancelText="取消"
+                onConfirm={() => handleTransferToAdmission(currentHospAdvice.id)}
               >
-                转住院登记
-              </Button>
+                <Button
+                  type="primary"
+                  icon={<SendOutlined />}
+                >
+                  转住院登记
+                </Button>
+              </Popconfirm>
             </Space>
           ) : null
         }

@@ -110,6 +110,8 @@ const Detail: React.FC = () => {
     updateFollowUpStatus,
     markKeyCase,
     updatePatientRiskLevel,
+    setPreFillConsultationPatient,
+    setPreFillHospitalizationPatient,
   } = useAppStore();
 
   const [riskModalVisible, setRiskModalVisible] = useState(false);
@@ -1252,10 +1254,24 @@ const Detail: React.FC = () => {
               >
                 调整风险
               </Button>
-              <Button icon={<TeamOutlined />} type="default">
+              <Button
+                icon={<TeamOutlined />}
+                type="default"
+                onClick={() => {
+                  setPreFillConsultationPatient(selectedPatientId);
+                  setActiveWindow('consultation');
+                }}
+              >
                 申请会诊
               </Button>
-              <Button icon={<ApartmentOutlined />} type="default">
+              <Button
+                icon={<ApartmentOutlined />}
+                type="default"
+                onClick={() => {
+                  setPreFillHospitalizationPatient(selectedPatientId);
+                  setActiveWindow('consultation');
+                }}
+              >
                 安排住院
               </Button>
               <Button
