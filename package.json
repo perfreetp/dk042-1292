@@ -1,0 +1,59 @@
+{
+  "name": "obstetric-followup-tool",
+  "version": "1.0.0",
+  "private": true,
+  "description": "县级医院产科医生桌面端随访决策工具",
+  "author": "Obstetric Care Team",
+  "type": "module",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "antd": "^5.21.0",
+    "@ant-design/icons": "^5.5.1",
+    "recharts": "^2.13.0",
+    "dayjs": "^1.11.13",
+    "zustand": "^5.0.0",
+    "clsx": "^2.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10",
+    "electron": "^33.0.1",
+    "electron-builder": "^25.1.8",
+    "concurrently": "^9.0.1",
+    "wait-on": "^8.0.1",
+    "cross-env": "^7.0.3",
+    "@typescript-eslint/eslint-plugin": "^8.12.0",
+    "@typescript-eslint/parser": "^8.12.0",
+    "eslint": "^9.13.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.14"
+  },
+  "build": {
+    "appId": "com.obstetric.followup",
+    "productName": "产科随访决策工具",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "public/favicon.svg"
+    }
+  }
+}
