@@ -400,7 +400,7 @@ const QC: React.FC = () => {
           <Button type="link" size="small" icon={<EditOutlined />} onClick={() => handleEdit(record)}>
             编辑
           </Button>
-          {record.status === 'pending' && (
+          {(record.status === 'pending' || record.status === 'completed') && (
             <Button type="link" size="small" icon={<ToolOutlined />} onClick={() => handleRevise(record)}>
               整改
             </Button>
@@ -628,6 +628,38 @@ const QC: React.FC = () => {
                 />
               </div>
               <RiseOutlined style={{ fontSize: 40, color: '#52c41a33' }} />
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card style={{ borderRadius: 8, borderTop: '4px solid #fa8c16' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ color: '#666', fontSize: 13, marginBottom: 8 }}>待整改质控</div>
+                <Statistic
+                  value={
+                    qualityControlRecords.filter(
+                      (r) => (r.status === 'pending' || r.status === 'completed') && r.problems.length > 0
+                    ).length
+                  }
+                  valueStyle={{ color: '#fa8c16', fontSize: 28, fontWeight: 700 }}
+                />
+              </div>
+              <ToolOutlined style={{ fontSize: 40, color: '#fa8c1633' }} />
+            </div>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card style={{ borderRadius: 8, borderTop: '4px solid #52c41a' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ color: '#666', fontSize: 13, marginBottom: 8 }}>已整改质控</div>
+                <Statistic
+                  value={qualityControlRecords.filter((r) => r.status === 'revised').length}
+                  valueStyle={{ color: '#52c41a', fontSize: 28, fontWeight: 700 }}
+                />
+              </div>
+              <CheckCircleOutlined style={{ fontSize: 40, color: '#52c41a33' }} />
             </div>
           </Card>
         </Col>
@@ -880,7 +912,7 @@ const QC: React.FC = () => {
         onClose={() => setDetailVisible(false)}
         extra={
           <Space>
-            {currentRecord?.status === 'pending' && (
+            {(currentRecord?.status === 'pending' || currentRecord?.status === 'completed') && (
               <Button type="primary" icon={<ToolOutlined />} onClick={() => handleRevise(currentRecord)}>
                 整改
               </Button>

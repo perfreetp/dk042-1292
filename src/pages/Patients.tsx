@@ -35,6 +35,7 @@ import {
   ManOutlined,
   WomanOutlined,
   BulbOutlined,
+  CalendarOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType, TableRowSelection } from 'antd/es/table/interface';
 import dayjs from 'dayjs';
@@ -336,10 +337,10 @@ const Patients: React.FC = () => {
       ),
     },
     {
-      title: '下次复诊日期',
+      title: '复诊安排',
       dataIndex: 'nextVisitDate',
       key: 'nextVisitDate',
-      width: 130,
+      width: 220,
       render: (date: string, record) => {
         if (!date || record.currentStatus === 'hospitalized') {
           return <span style={{ color: '#bbb' }}>-</span>;
@@ -347,15 +348,37 @@ const Patients: React.FC = () => {
         const isOverdue = dayjs(date).isBefore(dayjs(), 'day');
         const isSoon = dayjs(date).diff(dayjs(), 'day') <= 3 && !isOverdue;
         return (
-          <span
-            style={{
-              color: isOverdue ? '#f5222d' : isSoon ? '#fa8c16' : undefined,
-              fontWeight: isOverdue || isSoon ? 600 : undefined,
-            }}
-          >
-            {date}
-            {isOverdue && <span style={{ marginLeft: 4 }}>（已过期）</span>}
-          </span>
+          <div>
+            <div
+              style={{
+                color: isOverdue ? '#f5222d' : isSoon ? '#fa8c16' : '#262626',
+                fontWeight: isOverdue || isSoon ? 600 : 500,
+                marginBottom: 4,
+              }}
+            >
+              <CalendarOutlined style={{ marginRight: 4, fontSize: 12 }} />
+              {date}
+              {isOverdue && <span style={{ marginLeft: 4 }}>（已过期）</span>}
+            </div>
+            {record.nextVisitTypes && record.nextVisitTypes.length > 0 && (
+              <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>
+                <span style={{ color: '#8c8c8c' }}>类型：</span>
+                {record.nextVisitTypes.join('、')}
+              </div>
+            )}
+            {record.nextVisitItems && record.nextVisitItems.length > 0 && (
+              <div style={{ fontSize: 12, color: '#595959' }}>
+                <span style={{ color: '#8c8c8c' }}>项目：</span>
+                {record.nextVisitItems.slice(0, 2).join('、')}
+                {record.nextVisitItems.length > 2 && ` +${record.nextVisitItems.length - 2}项`}
+              </div>
+            )}
+            {record.appliedTemplateName && (
+              <Tag color="blue" style={{ marginTop: 4, padding: '0 6px', fontSize: 11 }}>
+                模板：{record.appliedTemplateName}
+              </Tag>
+            )}
+          </div>
         );
       },
     },

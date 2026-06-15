@@ -849,6 +849,11 @@ export const mockHospitalizationAdvices: HospitalizationAdvice[] = [
     ],
     notes: '高危产科病例，需多学科协作，充分知情告知',
     status: 'admitted',
+    statusTimeline: [
+      { status: 'suggested', time: '2026-06-09 15:30', doctor: '李主任', remark: '前置胎盘需术前充分准备' },
+      { status: 'admitted', time: '2026-06-10 09:00', doctor: '李主任', remark: '已办理入院，术前评估中' },
+    ],
+    admissionDate: '2026-06-10',
   },
   {
     id: 'H002',
@@ -877,6 +882,9 @@ export const mockHospitalizationAdvices: HospitalizationAdvice[] = [
     ],
     notes: '严密监测血压，警惕子痫发作，备10%葡萄糖酸钙',
     status: 'suggested',
+    statusTimeline: [
+      { status: 'suggested', time: '2026-06-15 09:15', doctor: '李主任', remark: '重度子痫前期，建议住院评估终止妊娠时机' },
+    ],
   },
 ];
 
@@ -1089,6 +1097,8 @@ export const mockStatistics: StatisticsData = {
   readmissionRate: 1.8,
   cesareanRate: 38.2,
   avgHospitalStay: 5.2,
+  pendingQCRevision: 3,
+  completedQCRevision: 12,
 };
 
 export const riskLevelLabels: Record<RiskLevel, string> = {

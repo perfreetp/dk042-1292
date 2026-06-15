@@ -1,5 +1,17 @@
 export type RiskLevel = 'green' | 'yellow' | 'orange' | 'red';
 
+export interface TemplateApplicationRecord {
+  id: string;
+  templateId: string;
+  templateName: string;
+  applyTime: string;
+  applyDoctor: string;
+  nextVisitDate: string;
+  visitTypes: string[];
+  visitItems: string[];
+  remark?: string;
+}
+
 export interface Patient {
   id: string;
   name: string;
@@ -32,6 +44,7 @@ export interface Patient {
   appliedTemplateId?: string;
   appliedTemplateName?: string;
   appliedTemplateTime?: string;
+  templateApplicationHistory?: TemplateApplicationRecord[];
   attendingDoctor: string;
   tags: string[];
   isKeyCase: boolean;
@@ -168,6 +181,13 @@ export interface Consultation {
   suggestions?: string[];
 }
 
+export interface HospitalizationStatusLog {
+  status: 'suggested' | 'admitted' | 'discharged' | 'cancelled';
+  time: string;
+  doctor: string;
+  remark?: string;
+}
+
 export interface HospitalizationAdvice {
   id: string;
   patientId: string;
@@ -182,6 +202,9 @@ export interface HospitalizationAdvice {
   treatments: string[];
   notes: string;
   status: 'suggested' | 'admitted' | 'discharged' | 'cancelled';
+  statusTimeline?: HospitalizationStatusLog[];
+  admissionDate?: string;
+  dischargeDate?: string;
 }
 
 export interface DischargePlan {
@@ -266,4 +289,21 @@ export interface StatisticsData {
   readmissionRate: number;
   cesareanRate: number;
   avgHospitalStay: number;
+  pendingQCRevision: number;
+  completedQCRevision: number;
+}
+
+export type ReminderType = 'visit' | 'consultation' | 'hospital' | 'qc' | 'shift';
+
+export interface WorkReminder {
+  id: string;
+  type: ReminderType;
+  title: string;
+  subtitle: string;
+  patientId?: string;
+  patientName?: string;
+  recordId: string;
+  urgency: 'high' | 'medium' | 'low';
+  deadline?: string;
+  extra?: Record<string, any>;
 }

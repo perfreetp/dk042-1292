@@ -41,6 +41,8 @@ import {
   CloseCircleOutlined,
   MedicineBoxOutlined,
   WarningOutlined,
+  CalendarOutlined,
+  FileTextOutlined,
 } from '@ant-design/icons';
 import {
   LineChart,
@@ -317,8 +319,34 @@ const Detail: React.FC = () => {
               剩余 {Math.ceil((new Date(patient.dueDate).getTime() - Date.now()) / 86400000)} 天
             </Tag>
           </Descriptions.Item>
-          <Descriptions.Item label="下次产检">
-            {patient.nextVisitDate || '-'}
+          <Descriptions.Item label="复诊安排" span={3}>
+            {patient.nextVisitDate ? (
+              <Space direction="vertical" size={2} style={{ width: '100%' }}>
+                <Space>
+                  <Text strong style={{ color: '#1890ff' }}>
+                    <CalendarOutlined style={{ marginRight: 4 }} />
+                    {patient.nextVisitDate}
+                  </Text>
+                  {patient.appliedTemplateName && (
+                    <Tag color="blue">模板：{patient.appliedTemplateName}</Tag>
+                  )}
+                </Space>
+                {patient.nextVisitTypes && patient.nextVisitTypes.length > 0 && (
+                  <div style={{ fontSize: 13, color: '#595959' }}>
+                    <span style={{ color: '#8c8c8c' }}>复诊类型：</span>
+                    {patient.nextVisitTypes.join('、')}
+                  </div>
+                )}
+                {patient.nextVisitItems && patient.nextVisitItems.length > 0 && (
+                  <div style={{ fontSize: 13, color: '#595959' }}>
+                    <span style={{ color: '#8c8c8c' }}>复查项目：</span>
+                    {patient.nextVisitItems.join('、')}
+                  </div>
+                )}
+              </Space>
+            ) : (
+              <span style={{ color: '#bbb' }}>-</span>
+            )}
           </Descriptions.Item>
           <Descriptions.Item label="入院日期">
             {patient.admissionDate || '-'}
@@ -455,6 +483,61 @@ const Detail: React.FC = () => {
             </Space>
           </Col>
         </Row>
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <FileTextOutlined style={{ color: '#1890ff' }} />
+            处置历史
+          </Space>
+        }
+        size="small"
+      >
+        {patient.templateApplicationHistory && patient.templateApplicationHistory.length > 0 ? (
+          <Timeline
+            mode="left"
+            items={patient.templateApplicationHistory.slice(0, 5).map((record, idx) => ({
+              color: idx === 0 ? 'blue' : 'gray',
+              label: (
+                <div style={{ minWidth: 130 }}>
+                  <div style={{ fontWeight: 500, color: '#262626' }}>{record.applyTime}</div>
+                  <div style={{ fontSize: 12, color: '#8c8c8c' }}>{record.applyDoctor}</div>
+                </div>
+              ),
+              children: (
+                <div>
+                  <div style={{ fontWeight: 500, color: '#1890ff', marginBottom: 4 }}>
+                    {record.templateName}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>
+                    <span style={{ color: '#8c8c8c' }}>复诊日期：</span>
+                    {record.nextVisitDate}
+                  </div>
+                  {record.visitTypes && record.visitTypes.length > 0 && (
+                    <div style={{ fontSize: 12, color: '#595959', marginBottom: 2 }}>
+                      <span style={{ color: '#8c8c8c' }}>复诊类型：</span>
+                      {record.visitTypes.join('、')}
+                    </div>
+                  )}
+                  {record.visitItems && record.visitItems.length > 0 && (
+                    <div style={{ fontSize: 12, color: '#595959' }}>
+                      <span style={{ color: '#8c8c8c' }}>复查项目：</span>
+                      {record.visitItems.join('、')}
+                    </div>
+                  )}
+                  {record.remark && (
+                    <div style={{ fontSize: 12, color: '#fa8c16', marginTop: 4 }}>
+                      备注：{record.remark}
+                    </div>
+                  )}
+                </div>
+              ),
+            }))}
+          />
+        ) : (
+          <Empty description="暂无处置历史记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
       </Card>
     </Space>
   );

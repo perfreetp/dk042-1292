@@ -20,13 +20,14 @@ import Template from './pages/Template';
 import Consultation from './pages/Consultation';
 import Shift from './pages/Shift';
 import QC from './pages/QC';
+import Reminder from './pages/Reminder';
 
 const { Header, Sider, Content } = Layout;
 
-type ActiveWindow = 'patients' | 'detail' | 'template' | 'consultation' | 'shift' | 'qc';
+type ActiveWindow = 'patients' | 'detail' | 'template' | 'consultation' | 'shift' | 'qc' | 'reminder';
 
 const App: React.FC = () => {
-  const { activeWindow, setActiveWindow, consultations, patients } = useAppStore();
+  const { activeWindow, setActiveWindow, consultations, patients, getWorkReminders } = useAppStore();
   const [currentDateTime, setCurrentDateTime] = useState(new Date());
 
   useEffect(() => {
@@ -50,8 +51,26 @@ const App: React.FC = () => {
 
   const pendingConsultations = consultations.filter((c) => c.status === 'pending').length;
   const highRiskPatients = patients.filter((p) => p.riskLevel === 'red' || p.riskLevel === 'orange').length;
+  const allReminders = getWorkReminders();
+  const highPriorityCount = allReminders.filter((r) => r.urgency === 'high').length;
 
   const menuItems = [
+    {
+      key: 'reminder',
+      icon: <BellOutlined />,
+      label: (
+        <span>
+          工作提醒
+          {highPriorityCount > 0 && (
+            <Badge
+              count={highPriorityCount}
+              size="small"
+              style={{ marginLeft: 8, backgroundColor: '#ff4d4f' }}
+            />
+          )}
+        </span>
+      ),
+    },
     {
       key: 'patients',
       icon: <UsergroupAddOutlined />,
@@ -145,6 +164,8 @@ const App: React.FC = () => {
         return <Shift />;
       case 'qc':
         return <QC />;
+      case 'reminder':
+        return <Reminder />;
       default:
         return <Patients />;
     }
@@ -199,8 +220,11 @@ const App: React.FC = () => {
             </span>
           </div>
           <Space size={24}>
-            <Badge count={pendingConsultations + highRiskPatients} size="small">
-              <BellOutlined style={{ fontSize: 18, color: '#666', cursor: 'pointer' }} />
+            <Badge count={allReminders.length} size="small">
+              <BellOutlined
+                style={{ fontSize: 18, color: '#666', cursor: 'pointer' }}
+                onClick={() => setActiveWindow('reminder')}
+              />
             </Badge>
             <Dropdown menu={{ items: doctorMenuItems }} placement="bottomRight">
               <Space style={{ cursor: 'pointer' }}>

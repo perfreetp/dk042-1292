@@ -23,6 +23,7 @@ import {
   Alert,
   Descriptions,
   Popconfirm,
+  Empty,
 } from 'antd';
 import {
   PlusOutlined,
@@ -458,8 +459,27 @@ const ConsultationPage: React.FC = () => {
     updateHospitalizationStatus(adviceId, 'admitted', {
       patientStatus: 'hospitalized',
       admissionDate: new Date().toLocaleDateString('zh-CN'),
+      remark: '已办理住院登记',
     });
     message.success('住院登记成功！患者状态已更新为住院中');
+  };
+
+  const handleDischarge = (adviceId: string) => {
+    const advice = hospitalizationAdvices.find((a) => a.id === adviceId);
+    if (!advice) return;
+    updateHospitalizationStatus(adviceId, 'discharged', {
+      patientStatus: 'discharged',
+      dischargeDate: new Date().toLocaleDateString('zh-CN'),
+      remark: '已办理出院',
+    });
+    message.success('出院登记成功！患者状态已更新为已出院');
+  };
+
+  const handleCancelHospitalization = (adviceId: string) => {
+    updateHospitalizationStatus(adviceId, 'cancelled', {
+      remark: '取消住院建议',
+    });
+    message.success('住院建议已取消');
   };
 
   const consultationColumns: ColumnsType<Consultation> = [
@@ -1776,28 +1796,56 @@ const ConsultationPage: React.FC = () => {
         width={600}
         destroyOnClose
         extra={
-          currentHospAdvice && currentHospAdvice.status === 'suggested' ? (
+          currentHospAdvice ? (
             <Space>
-              <Button icon={<EditOutlined />} onClick={() => {
-                setHospDetailVisible(false);
-                handleOpenHospEdit(currentHospAdvice);
-              }}>
-                编辑
-              </Button>
-              <Popconfirm
-                title="确认已为该患者办理住院？"
-                description="确认后将更新患者状态为住院中"
-                okText="确认办理"
-                cancelText="取消"
-                onConfirm={() => handleTransferToAdmission(currentHospAdvice.id)}
-              >
-                <Button
-                  type="primary"
-                  icon={<SendOutlined />}
+              {currentHospAdvice.status === 'suggested' && (
+                <>
+                  <Button icon={<EditOutlined />} onClick={() => {
+                    setHospDetailVisible(false);
+                    handleOpenHospEdit(currentHospAdvice);
+                  }}>
+                    编辑
+                  </Button>
+                  <Popconfirm
+                    title="确认取消该住院建议？"
+                    okText="确认取消"
+                    cancelText="返回"
+                    onConfirm={() => handleCancelHospitalization(currentHospAdvice.id)}
+                  >
+                    <Button danger>取消建议</Button>
+                  </Popconfirm>
+                  <Popconfirm
+                    title="确认已为该患者办理住院？"
+                    description="确认后将更新患者状态为住院中"
+                    okText="确认办理"
+                    cancelText="取消"
+                    onConfirm={() => handleTransferToAdmission(currentHospAdvice.id)}
+                  >
+                    <Button
+                      type="primary"
+                      icon={<SendOutlined />}
+                    >
+                      转住院登记
+                    </Button>
+                  </Popconfirm>
+                </>
+              )}
+              {currentHospAdvice.status === 'admitted' && (
+                <Popconfirm
+                  title="确认该患者已出院？"
+                  description="确认后将更新患者状态为已出院"
+                  okText="确认出院"
+                  cancelText="取消"
+                  onConfirm={() => handleDischarge(currentHospAdvice.id)}
                 >
-                  转住院登记
-                </Button>
-              </Popconfirm>
+                  <Button type="primary">办理出院</Button>
+                </Popconfirm>
+              )}
+              {(currentHospAdvice.status === 'discharged' || currentHospAdvice.status === 'cancelled') && (
+                <Tag color={hospitalizationStatusColors[currentHospAdvice.status]} style={{ margin: 0 }}>
+                  已{currentHospAdvice.status === 'discharged' ? '出院' : '取消'}
+                </Tag>
+              )}
             </Space>
           ) : null
         }
@@ -1904,6 +1952,48 @@ const ConsultationPage: React.FC = () => {
                 {currentHospAdvice.notes || <span style={{ color: '#bbb' }}>—</span>}
               </Descriptions.Item>
             </Descriptions>
+
+            <Card
+              size="small"
+              title={
+                <Space>
+                  <ClockCircleOutlined style={{ color: '#1890ff' }} />
+                  状态时间线
+                </Space>
+              }
+            >
+              {currentHospAdvice.statusTimeline && currentHospAdvice.statusTimeline.length > 0 ? (
+                <Timeline
+                  items={[...currentHospAdvice.statusTimeline].reverse().map((log, idx) => ({
+                    color:
+                      log.status === 'suggested'
+                        ? 'blue'
+                        : log.status === 'admitted'
+                          ? 'green'
+                          : log.status === 'discharged'
+                            ? 'gray'
+                            : 'red',
+                    children: (
+                      <div>
+                        <div style={{ fontWeight: 500, color: '#262626' }}>
+                          {hospitalizationStatusLabels[log.status]}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#8c8c8c', marginTop: 2 }}>
+                          {log.doctor} · {log.time}
+                        </div>
+                        {log.remark && (
+                          <div style={{ fontSize: 12, color: '#595959', marginTop: 4 }}>
+                            {log.remark}
+                          </div>
+                        )}
+                      </div>
+                    ),
+                  }))}
+                />
+              ) : (
+                <Empty description="暂无状态记录" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+              )}
+            </Card>
           </div>
         )}
       </Drawer>
